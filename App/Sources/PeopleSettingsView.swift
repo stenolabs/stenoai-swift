@@ -37,6 +37,7 @@ struct PeopleSettingsView: View {
             header
             Divider()
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let undoable {
                 undoBar(undoable)
             }
@@ -53,7 +54,12 @@ struct PeopleSettingsView: View {
                 .padding(Steno.Space.m)
             }
         }
-        .frame(minHeight: 420)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: 420,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
         .task { await reload() }
         .onDisappear { model.stopSamplePlayback() }
         .sheet(item: $enrolling) { entry in
