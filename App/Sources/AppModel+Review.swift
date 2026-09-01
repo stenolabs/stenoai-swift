@@ -652,27 +652,93 @@ extension AppModel {
     // MARK: - Meeting verwalten
 
     func deleteMeeting(_ meetingID: MeetingID) async {
+        await deleteMeetings([meetingID])
+    }
+
+    func deleteMeetings(_ meetingIDs: [MeetingID]) async {
         guard let runtime else { return }
-        do {
-            let jobs = (try? await runtime.jobStore.list())?
-                .filter { $0.meetingID == meetingID } ?? []
-            for job in jobs where job.status == .queued || job.status == .running {
-                try? await runtime.coordinator.cancel(jobID: job.id)
+        var seen: Set<MeetingID> = []
+        let targets = meetingIDs.filter { seen.insert($0).inserted }
+        guard !targets.isEmpty else { return }
+
+        let selectedMeetings = meetings.filter { targets.contains($0.id) }
+        guard !isRecording,
+              !isStartingRecording,
+              !selectedMeetings.contains(where: { $0.status == .recording }) else {
+            report(targets.count == 1
+                ? "The meeting cannot be moved to the Trash while recording."
+                : "Meetings cannot be moved to the Trash while recording.")
+            return
+        }
+        guard beginMovingMeetingsToTrash() else { return }
+        defer { finishMovingMeetingsToTrash() }
+
+        let titles = Dictionary(uniqueKeysWithValues: meetings.map {
+            ($0.id, $0.title)
+        })
+        var trashedItems: [UndoDeleteToastItem] = []
+        var lastTrashError: Error?
+        var lastCleanupError: Error?
+
+        for meetingID in targets {
+            do {
+                let jobs = try await runtime.jobStore.list().filter {
+                    $0.meetingID == meetingID
+                }
+                for job in jobs
+                where job.status == .queued || job.status == .running {
+                    try await runtime.coordinator.cancel(jobID: job.id)
+                }
+                let trashedURL = try await meetingTrasher(
+                    runtime.library,
+                    meetingID
+                )
+                trashedItems.append(UndoDeleteToastItem(
+                    meetingID: meetingID,
+                    title: titles[meetingID] ?? meetingID.description,
+                    trashedURL: trashedURL
+                ))
+                do {
+                    try await runtime.jobStore.removeJobs(meetingID: meetingID)
+                } catch {
+                    lastCleanupError = error
+                }
+            } catch {
+                lastTrashError = error
             }
-            try await runtime.jobStore.removeJobs(meetingID: meetingID)
-            let trashedTitle = meetings.first(where: { $0.id == meetingID })?.title
-            let trashedURL = try await runtime.library.trashMeeting(meetingID)
-            beginTrashUndoWindow(
-                meetingID: meetingID,
-                title: trashedTitle ?? meetingID.description,
-                trashedURL: trashedURL
-            )
-            if selectedMeetingID == meetingID { selectedMeetingID = nil }
+        }
+
+        if !trashedItems.isEmpty {
+            beginTrashUndoWindow(items: trashedItems)
+            selectedMeetingIDs.subtract(Set(trashedItems.map(\.meetingID)))
             await refreshMeetings()
-        } catch {
-            // Loeschen wird aus dem Kontextmenue der Seitenleiste
-            // ausgeloest; die Review-Sektion ist dann meist gar nicht sichtbar.
-            report(AppModel.message("The meeting could not be moved to the trash.", error))
+        }
+
+        let failedCount = targets.count - trashedItems.count
+        guard failedCount > 0 else {
+            if let lastCleanupError {
+                let summary = targets.count == 1
+                    ? "The meeting was moved to the Trash, but its processing records could not be cleaned up."
+                    : "The meetings were moved to the Trash, but some processing records could not be cleaned up."
+                report(AppModel.message(summary, lastCleanupError))
+            }
+            return
+        }
+        var summary: String
+        if targets.count == 1 {
+            summary = "The meeting could not be moved to the Trash."
+        } else if trashedItems.isEmpty {
+            summary = "The meetings could not be moved to the Trash."
+        } else {
+            summary = "\(trashedItems.count) of \(targets.count) meetings were moved to the Trash. \(failedCount) could not be moved."
+        }
+        if lastCleanupError != nil {
+            summary += " Some processing records for moved meetings could not be cleaned up."
+        }
+        if let error = lastTrashError ?? lastCleanupError {
+            report(AppModel.message(summary, error))
+        } else {
+            report(summary)
         }
     }
 

@@ -34,7 +34,7 @@ struct StenoCommandTests {
         #expect(detailAvailability.canShare)
     }
 
-    @Test("multiple meetings expose only the implemented batch move")
+    @Test("multiple meetings expose batch move and trash actions")
     func multipleMeetingAvailability() {
         let first = meeting(1, status: .ready)
         let second = meeting(2, status: .ready)
@@ -52,12 +52,13 @@ struct StenoCommandTests {
         #expect(!availability.canRetranscribe)
         #expect(!availability.canExportMarkdown)
         #expect(!availability.canExportAudio)
-        #expect(!availability.canMoveToTrash)
+        #expect(availability.canMoveToTrash)
     }
 
     @Test("recording and missing audio disable only affected meeting actions")
     func recordingAndAudioAvailability() {
         let ready = meeting(1, status: .ready)
+        let active = meeting(2, status: .recording)
         let noAudio = MacMeetingCommandAvailability(
             meetings: [ready],
             selectedMeetingIDs: [ready.id],
@@ -70,6 +71,13 @@ struct StenoCommandTests {
             selectedMeetingIDs: [ready.id],
             meetingsWithAudio: [ready.id],
             isRecording: true,
+            hasRuntime: true
+        )
+        let batchContainingActiveMeeting = MacMeetingCommandAvailability(
+            meetings: [ready, active],
+            selectedMeetingIDs: [ready.id, active.id],
+            meetingsWithAudio: [ready.id, active.id],
+            isRecording: false,
             hasRuntime: true
         )
 
@@ -85,6 +93,7 @@ struct StenoCommandTests {
         #expect(!recording.canRetranscribe)
         #expect(!recording.canExportAudio)
         #expect(!recording.canMoveToTrash)
+        #expect(!batchContainingActiveMeeting.canMoveToTrash)
     }
 
     @Test("focused folder wins over a stale meeting selection")
@@ -213,6 +222,12 @@ struct StenoCommandTests {
             isStartingRecording: false,
             isResolvingRecordingPermissions: true
         )
+        let movingMeetingsToTrash = StenoCommandState(
+            hasRuntime: true,
+            isRecording: false,
+            isStartingRecording: false,
+            isMovingMeetingsToTrash: true
+        )
 
         #expect(!unavailable.canStartRecording)
         #expect(!unavailable.canCreateMeeting)
@@ -232,6 +247,9 @@ struct StenoCommandTests {
         #expect(recording.canStopRecording)
         #expect(recording.canMarkMoment)
         #expect(!resolvingPermissions.canStartRecording)
+        #expect(!movingMeetingsToTrash.canStartRecording)
+        #expect(!movingMeetingsToTrash.canCreateMeeting)
+        #expect(!movingMeetingsToTrash.canImport)
     }
 
     private func meeting(

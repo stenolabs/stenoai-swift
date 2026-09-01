@@ -160,11 +160,184 @@ struct AppModelFolderBehaviorTests {
 
         do {
             try await operation(model, libraryURL)
+            await model.stopBackgroundLibraryTasksForTesting()
             await model.runtime?.coordinator.stop()
         } catch {
+            await model.stopBackgroundLibraryTasksForTesting()
             await model.runtime?.coordinator.stop()
             throw error
         }
     }
 
+}
+
+@Suite("App model meeting deletion", .serialized)
+@MainActor
+struct AppModelMeetingDeletionTests {
+    private enum FixtureError: Error {
+        case rejectedTrashMove
+    }
+
+    @Test("batch deletion keeps the complete operation available for undo")
+    func batchDeletionAndUndo() async throws {
+        try await withIsolatedModel { model, trashURL in
+            let runtime = try #require(model.runtime)
+            let first = try await runtime.library.createMeeting(
+                title: "First",
+                status: .ready
+            )
+            let second = try await runtime.library.createMeeting(
+                title: "Second",
+                status: .ready
+            )
+            await model.refreshMeetings()
+            model.selectedMeetingIDs = [first.id, second.id]
+
+            await model.deleteMeetings([first.id, second.id])
+
+            #expect(model.meetings.isEmpty)
+            #expect(model.selectedMeetingIDs.isEmpty)
+            let undo = try #require(model.pendingTrashUndo)
+            #expect(undo.items.map(\.meetingID) == [first.id, second.id])
+            #expect(FileManager.default.fileExists(
+                atPath: trashURL.appendingPathComponent(first.id.description).path
+            ))
+            #expect(FileManager.default.fileExists(
+                atPath: trashURL.appendingPathComponent(second.id.description).path
+            ))
+
+            await model.restoreTrashedMeetings()
+
+            #expect(model.pendingTrashUndo == nil)
+            #expect(Set(model.meetings.map(\.id)) == [first.id, second.id])
+            #expect(FileManager.default.fileExists(
+                atPath: runtime.library.layout.meetingDirectory(first.id).path
+            ))
+            #expect(FileManager.default.fileExists(
+                atPath: runtime.library.layout.meetingDirectory(second.id).path
+            ))
+        }
+    }
+
+    @Test("a failed trash move keeps that meeting's processing records")
+    func failedTrashMovePreservesJobs() async throws {
+        try await withIsolatedModel(failingTrashCall: 2) { model, _ in
+            let runtime = try #require(model.runtime)
+            let first = try await runtime.library.createMeeting(
+                title: "First",
+                status: .ready
+            )
+            let second = try await runtime.library.createMeeting(
+                title: "Second",
+                status: .ready
+            )
+            let retainedJob = Job(
+                kind: .finalASR,
+                meetingID: second.id,
+                status: .failed
+            )
+            try await runtime.jobStore.enqueue(retainedJob)
+            await model.refreshMeetings()
+
+            await model.deleteMeetings([first.id, second.id])
+
+            #expect(model.meetings.map(\.id) == [second.id])
+            #expect(try await runtime.jobStore.load(retainedJob.id) == retainedJob)
+            let undo = try #require(model.pendingTrashUndo)
+            #expect(undo.items.map(\.meetingID) == [first.id])
+
+            await model.restoreTrashedMeetings()
+
+            #expect(Set(model.meetings.map(\.id)) == [first.id, second.id])
+        }
+    }
+
+    @Test("moving meetings to trash blocks recording until the move finishes")
+    func trashMoveBlocksRecordingStart() async throws {
+        let enteredTrashMove = AsyncStream.makeStream(of: Void.self)
+        let releaseTrashMove = AsyncStream.makeStream(of: Void.self)
+
+        try await withIsolatedModel(trashCheckpoint: {
+            enteredTrashMove.continuation.yield()
+            var releases = releaseTrashMove.stream.makeAsyncIterator()
+            _ = await releases.next()
+        }) { model, _ in
+            let runtime = try #require(model.runtime)
+            let meeting = try await runtime.library.createMeeting(
+                title: "Protected recording start",
+                status: .ready
+            )
+            await model.refreshMeetings()
+            #expect(model.canStartRecording)
+
+            let deletion = Task {
+                await model.deleteMeetings([meeting.id])
+            }
+            var entries = enteredTrashMove.stream.makeAsyncIterator()
+            _ = await entries.next()
+
+            #expect(model.isMovingMeetingsToTrash)
+            #expect(!model.canStartRecording)
+
+            releaseTrashMove.continuation.yield()
+            releaseTrashMove.continuation.finish()
+            await deletion.value
+
+            #expect(!model.isMovingMeetingsToTrash)
+            #expect(model.canStartRecording)
+        }
+        enteredTrashMove.continuation.finish()
+    }
+
+    private func withIsolatedModel(
+        failingTrashCall: Int? = nil,
+        trashCheckpoint: @escaping @MainActor () async -> Void = {},
+        _ operation: (AppModel, URL) async throws -> Void
+    ) async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "Steno-AppModelMeetingDeletionTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let libraryURL = root.appendingPathComponent("Library", isDirectory: true)
+        let modelURL = root.appendingPathComponent("Models", isDirectory: true)
+        let trashURL = root.appendingPathComponent("Trash", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: trashURL,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var trashCallCount = 0
+        let model = AppModel(
+            meetingTrasher: { library, meetingID in
+                trashCallCount += 1
+                if trashCallCount == failingTrashCall {
+                    throw FixtureError.rejectedTrashMove
+                }
+                await trashCheckpoint()
+                let source = library.layout.meetingDirectory(meetingID)
+                let destination = trashURL.appendingPathComponent(
+                    meetingID.description,
+                    isDirectory: true
+                )
+                try FileManager.default.moveItem(at: source, to: destination)
+                return destination
+            },
+            libraryURL: libraryURL,
+            modelCacheDirectoryOverride: modelURL
+        )
+        await model.bootstrap()
+        _ = try #require(model.runtime)
+
+        do {
+            try await operation(model, trashURL)
+            await model.stopBackgroundLibraryTasksForTesting()
+            await model.runtime?.coordinator.stop()
+        } catch {
+            await model.stopBackgroundLibraryTasksForTesting()
+            await model.runtime?.coordinator.stop()
+            throw error
+        }
+    }
 }

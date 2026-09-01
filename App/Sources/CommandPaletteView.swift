@@ -195,7 +195,12 @@ enum CommandPaletteCatalog {
         }
         if let meeting = contexts.meeting,
            meeting.availability.canMoveToTrash {
-            append(.moveToTrash, "Move Meeting to Trash…") {
+            append(
+                .moveToTrash,
+                String(localized: MeetingTrashRequest.commandTitle(
+                    meetingCount: meeting.meetingIDs.count
+                ))
+            ) {
                 meeting.moveToTrash()
             }
         }

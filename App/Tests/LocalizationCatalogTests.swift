@@ -1,4 +1,5 @@
 import Foundation
+import StenoDomain
 import StenoIntelligence
 import Testing
 @testable import steno_macos
@@ -103,6 +104,26 @@ struct LocalizationCatalogTests {
             localized(DemoDataPresentation.installAction, locale: german)
                 == "Demo-Meetings installieren"
         )
+        let trashRequest = try #require(MeetingTrashRequest(meetings: [
+            Meeting(
+                title: "Erstes Meeting",
+                createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+                status: .ready
+            ),
+            Meeting(
+                title: "Zweites Meeting",
+                createdAt: Date(timeIntervalSince1970: 1_700_000_001),
+                status: .ready
+            ),
+        ]))
+        #expect(
+            localized(trashRequest.confirmationTitle, locale: german)
+                == "2 Meetings in den Papierkorb legen?"
+        )
+        #expect(
+            localized(trashRequest.menuTitle, locale: german)
+                == "2 Meetings in den Papierkorb legen…"
+        )
 
         let traditionalChinese = Locale(identifier: "zh-Hant")
         #expect(
@@ -125,6 +146,10 @@ struct LocalizationCatalogTests {
                 ),
                 locale: traditionalChinese
             ) == "三個示範會議皆已安裝。"
+        )
+        #expect(
+            localized(trashRequest.actionTitle, locale: traditionalChinese)
+                == "將 2 場會議移至垃圾桶"
         )
     }
     private func expectGermanTranslations(in catalog: StringCatalog) {

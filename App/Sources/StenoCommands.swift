@@ -89,12 +89,14 @@ struct StenoCommandState: Equatable {
     let hasRuntime: Bool
     let isRecording: Bool
     let isStartingRecording: Bool
+    let isMovingMeetingsToTrash: Bool
     let isResolvingRecordingPermissions: Bool
 
     var canStartRecording: Bool {
         hasRuntime
             && !isRecording
             && !isStartingRecording
+            && !isMovingMeetingsToTrash
             && !isResolvingRecordingPermissions
     }
 
@@ -107,11 +109,17 @@ struct StenoCommandState: Equatable {
     }
 
     var canCreateMeeting: Bool {
-        hasRuntime && !isRecording && !isStartingRecording
+        hasRuntime
+            && !isRecording
+            && !isStartingRecording
+            && !isMovingMeetingsToTrash
     }
 
     var canImport: Bool {
-        hasRuntime && !isRecording && !isStartingRecording
+        hasRuntime
+            && !isRecording
+            && !isStartingRecording
+            && !isMovingMeetingsToTrash
     }
 
     @MainActor
@@ -120,6 +128,7 @@ struct StenoCommandState: Equatable {
             hasRuntime: model.runtime != nil,
             isRecording: model.isRecording,
             isStartingRecording: model.isStartingRecording,
+            isMovingMeetingsToTrash: model.isMovingMeetingsToTrash,
             isResolvingRecordingPermissions:
                 model.isResolvingRecordingPermissions
         )
@@ -129,11 +138,13 @@ struct StenoCommandState: Equatable {
         hasRuntime: Bool,
         isRecording: Bool,
         isStartingRecording: Bool,
+        isMovingMeetingsToTrash: Bool = false,
         isResolvingRecordingPermissions: Bool = false
     ) {
         self.hasRuntime = hasRuntime
         self.isRecording = isRecording
         self.isStartingRecording = isStartingRecording
+        self.isMovingMeetingsToTrash = isMovingMeetingsToTrash
         self.isResolvingRecordingPermissions =
             isResolvingRecordingPermissions
     }
@@ -299,8 +310,12 @@ struct StenoCommands: Commands {
 
             Divider()
 
-            Button("Move Meeting to Trash…", role: .destructive) {
+            Button(role: .destructive) {
                 meetingContext?.moveToTrash()
+            } label: {
+                Text(MeetingTrashRequest.commandTitle(
+                    meetingCount: meetingContext?.meetingIDs.count ?? 1
+                ))
             }
             .stenoKeyboardShortcut(.moveToTrash)
             .disabled(

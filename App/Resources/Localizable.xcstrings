@@ -285,6 +285,22 @@
         }
       }
     },
+    "%lld meetings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Meetings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 場會議"
+          }
+        }
+      }
+    },
     "%lld notices": {
       "localizations": {
         "de": {
@@ -4664,6 +4680,54 @@
         }
       }
     },
+    "Move %lld Meetings to the Trash?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Meetings in den Papierkorb legen?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要將 %lld 場會議移至垃圾桶嗎？"
+          }
+        }
+      }
+    },
+    "Move %lld Meetings to Trash": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Meetings in den Papierkorb legen"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將 %lld 場會議移至垃圾桶"
+          }
+        }
+      }
+    },
+    "Move %lld Meetings to Trash…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Meetings in den Papierkorb legen…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將 %lld 場會議移至垃圾桶…"
+          }
+        }
+      }
+    },
     "Move Down": {
       "localizations": {
         "de": {
@@ -7708,6 +7772,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "整個會議資料夾（音訊、逐字稿、處理紀錄）將移至垃圾桶並可在其中復原。尚未命名的發言者在刪除後將無法再命名，因為命名需要音訊檔案。"
+          }
+        }
+      }
+    },
+    "All selected meeting folders (audio, transcripts, runs) move to the Trash and stay recoverable there. Speakers that are still unnamed cannot be named after deletion, because naming needs the audio files.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle ausgewählten Meeting-Ordner mit Audio, Transkripten und Läufen werden in den Papierkorb verschoben und bleiben dort wiederherstellbar. Noch unbenannte Sprecher können nach dem Löschen nicht mehr benannt werden, da dafür die Audiodateien benötigt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有已選取的會議資料夾（音訊、逐字稿、處理紀錄）都將移至垃圾桶並可在其中復原。尚未命名的發言者在刪除後將無法再命名，因為命名需要音訊檔案。"
           }
         }
       }

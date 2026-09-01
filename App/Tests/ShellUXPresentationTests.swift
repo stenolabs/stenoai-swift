@@ -168,6 +168,32 @@ struct UndoDeleteToastPolicyTests {
         #expect(!second.isActive(now: secondNow.addingTimeInterval(9)))
         #expect(second.title == "Second")
     }
+
+    @Test("one batch window keeps every meeting available for undo")
+    func batchWindow() throws {
+        let first = UndoDeleteToastItem(
+            meetingID: MeetingID(rawValue: UUID()),
+            title: "First",
+            trashedURL: URL(fileURLWithPath: "/tmp/first")
+        )
+        let second = UndoDeleteToastItem(
+            meetingID: MeetingID(rawValue: UUID()),
+            title: "Second",
+            trashedURL: URL(fileURLWithPath: "/tmp/second")
+        )
+
+        let window = try #require(UndoDeleteToastPolicy.begin(
+            previous: nil,
+            items: [first, second],
+            now: now
+        ))
+
+        #expect(window.items == [first, second])
+        #expect(window.title == String(
+            localized: "\(window.items.count) meetings"
+        ))
+        #expect(window.isActive(now: now.addingTimeInterval(7.9)))
+    }
 }
 
 @Suite("Home status header projection")

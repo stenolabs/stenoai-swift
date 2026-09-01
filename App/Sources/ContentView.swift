@@ -247,7 +247,7 @@ struct ContentView: View {
                     HStack(alignment: .bottom) {
                         UndoDeleteToast(
                             window: trashUndo,
-                            onUndo: { Task { await model.restoreTrashedMeeting() } },
+                            onUndo: { Task { await model.restoreTrashedMeetings() } },
                             onExpire: { model.expireTrashUndoIfElapsed() }
                         )
                         Spacer()

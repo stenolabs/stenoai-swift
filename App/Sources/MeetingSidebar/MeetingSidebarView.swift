@@ -8,7 +8,7 @@ struct MeetingSidebarView: View {
 
     @State private var renameTarget: Meeting?
     @State private var renameTitle = ""
-    @State private var deleteTarget: Meeting?
+    @State private var deleteTarget: MeetingTrashRequest?
     @State private var folderRenameTarget: Folder?
     @State private var folderName = ""
     @State private var folderDeleteTarget: Folder?
@@ -119,6 +119,11 @@ struct MeetingSidebarView: View {
             \.stenoMeetingCommandContext,
             meetingCommandContext(for: selection)
         )
+        .onDeleteCommand {
+            guard let context = meetingCommandContext(for: selection),
+                  context.availability.canMoveToTrash else { return }
+            context.moveToTrash()
+        }
         .toolbar(id: MacToolbarID.sidebar.rawValue) {
             ToolbarItem(
                 id: MacToolbarItemID.newFolder.rawValue,
@@ -472,6 +477,7 @@ struct MeetingSidebarView: View {
                 meetingDestinationMenu(context)
             }
             .disabled(!context.availability.canMove)
+            Divider()
         } else if context.meetingIDs.count == 1 {
             Button("Rename…", action: context.rename)
                 .disabled(!context.availability.canRename)
@@ -489,11 +495,13 @@ struct MeetingSidebarView: View {
             Button("Export Audio…", action: context.exportAudio)
                 .disabled(!context.availability.canExportAudio)
             Divider()
-            Button(
-                "Move to Trash…",
-                role: .destructive,
-                action: context.moveToTrash
-            )
+        }
+        if !context.meetingIDs.isEmpty {
+            Button(role: .destructive, action: context.moveToTrash) {
+                Text(MeetingTrashRequest.menuTitle(
+                    meetingCount: context.meetingIDs.count
+                ))
+            }
             .disabled(!context.availability.canMoveToTrash)
         }
     }
@@ -521,9 +529,12 @@ struct MeetingSidebarView: View {
             meetings: model.meetings,
             selectedMeetingIDs: capturedMeetingIDs,
             meetingsWithAudio: model.meetingsWithAudio,
-            isRecording: model.isRecording,
+            isRecording: model.isRecording
+                || model.isStartingRecording
+                || model.isMovingMeetingsToTrash,
             hasRuntime: model.runtime != nil
         )
+        let trashRequest = MeetingTrashRequest(meetings: selectedMeetings)
 
         return MacMeetingCommandContext(
             meetingIDs: capturedMeetingIDs,
@@ -556,8 +567,9 @@ struct MeetingSidebarView: View {
                 beginAudioExport(for: meeting)
             },
             moveToTrash: {
-                guard let meeting else { return }
-                deleteTarget = meeting
+                guard availability.canMoveToTrash,
+                      let trashRequest else { return }
+                deleteTarget = trashRequest
             }
         )
     }
@@ -1130,7 +1142,7 @@ private struct MeetingDialogs: ViewModifier {
     @Environment(AppModel.self) private var model
     @Binding var renameTitle: String
     @Binding var renameTarget: Meeting?
-    @Binding var deleteTarget: Meeting?
+    @Binding var deleteTarget: MeetingTrashRequest?
     @Binding var retranscribeTarget: Meeting?
 
     func body(content: Content) -> some View {
@@ -1182,22 +1194,26 @@ private struct MeetingDialogs: ViewModifier {
                 }
             }
             .confirmationDialog(
-                deleteTarget.map { "Move \u{201C}\($0.title)\u{201D} to the Trash?" } ?? "",
+                deleteTarget.map {
+                    String(localized: $0.confirmationTitle)
+                } ?? "",
                 isPresented: Binding(
                     get: { deleteTarget != nil },
                     set: { if !$0 { deleteTarget = nil } }
                 ),
                 titleVisibility: .visible,
                 presenting: deleteTarget
-            ) { meeting in
-                Button("Move to Trash", role: .destructive) {
-                    let target = meeting.id
+            ) { request in
+                Button(role: .destructive) {
+                    let targets = request.meetingIDs
                     deleteTarget = nil
-                    Task { await model.deleteMeeting(target) }
+                    Task { await model.deleteMeetings(targets) }
+                } label: {
+                    Text(request.actionTitle)
                 }
                 Button("Cancel", role: .cancel) { deleteTarget = nil }
-            } message: { _ in
-                Text("The entire meeting folder (audio, transcripts, runs) moves to the Trash and stays recoverable there. Speakers that are still unnamed cannot be named after deletion, because naming needs the audio file.")
+            } message: { request in
+                Text(request.message)
             }
     }
 }

@@ -93,6 +93,10 @@ final class AppModel {
         URL,
         @escaping @MainActor @Sendable (StereoM4AExportProgress) -> Void
     ) async throws -> Void
+    typealias MeetingTrasher = @MainActor (
+        Library,
+        MeetingID
+    ) async throws -> URL?
     private static let baselineModelBundleIDs: Set<ModelBundleID> = [
         .appleSpeech,
         .speakerSeparation,
@@ -107,6 +111,7 @@ final class AppModel {
     private(set) var recoveredMeetingIDs: [MeetingID] = []
     private(set) var isBootstrappingPipeline = false
     private(set) var isSwitchingTranscriptionLanguage = false
+    private(set) var isMovingMeetingsToTrash = false
 
     // Der Dialog besitzt niemals die externe Dokument-URL. Sie lebt nur auf
     // dem Stack des vorbereitenden Tasks, bis StenoKit den privaten Snapshot
@@ -147,6 +152,8 @@ final class AppModel {
     let meetingTransferTemporaryDirectory: @Sendable () -> URL
     @ObservationIgnored
     let stereoAudioExportPerformer: StereoAudioExportPerformer
+    @ObservationIgnored
+    let meetingTrasher: MeetingTrasher
     @ObservationIgnored
     private let languagePreferences: TranscriptionLanguagePreferences
     @ObservationIgnored
@@ -206,6 +213,9 @@ final class AppModel {
             FileManager.default.temporaryDirectory
         },
         stereoAudioExportPerformer: StereoAudioExportPerformer? = nil,
+        meetingTrasher: @escaping MeetingTrasher = { library, meetingID in
+            try library.trashMeeting(meetingID)
+        },
         languagePreferences: TranscriptionLanguagePreferences = .init(),
         transcriptionModels: TranscriptionModelSettings = TranscriptionModelSettings(),
         transcriptionRegistry: TranscriptionProviderRegistry? = nil,
@@ -253,6 +263,7 @@ final class AppModel {
         self.meetingTransferSecurityScope = meetingTransferSecurityScope
         self.meetingTransferSharing = meetingTransferSharing
         self.meetingTransferTemporaryDirectory = meetingTransferTemporaryDirectory
+        self.meetingTrasher = meetingTrasher
         self.languagePreferences = languagePreferences
         self.recordingPermissionClient = recordingPermissionClient
         self.recordingPermissionDefaults = recordingPermissionDefaults
@@ -503,22 +514,19 @@ final class AppModel {
 
     private(set) var pendingTrashUndo: UndoDeleteToastWindow?
 
-    /// Opens (or restarts) the 8-second undo window after a meeting moved
-    /// to Trash. A second delete replaces the pending toast: exactly one
-    /// toast exists at any time, and its timer starts fresh.
+    /// Opens (or restarts) the 8-second undo window after one confirmed trash
+    /// operation. A batch stays together, while a later operation replaces
+    /// the pending toast and starts a fresh timer.
     func beginTrashUndoWindow(
-        meetingID: MeetingID,
-        title: String,
-        trashedURL: URL?,
+        items: [UndoDeleteToastItem],
         now: Date = Date()
     ) {
-        pendingTrashUndo = UndoDeleteToastPolicy.begin(
+        guard let window = UndoDeleteToastPolicy.begin(
             previous: pendingTrashUndo,
-            meetingID: meetingID,
-            title: title,
-            trashedURL: trashedURL,
+            items: items,
             now: now
-        )
+        ) else { return }
+        pendingTrashUndo = window
     }
 
     /// Drops the pending toast once its window has elapsed. The toast view
@@ -530,41 +538,73 @@ final class AppModel {
         )
     }
 
-    /// Undoes the trash move: moves the meeting folder back out of the
-    /// Finder trash into the library under the same exclusive lock every
-    /// other library mutation uses, then selects the restored meeting so
-    /// the user lands where they were before the mis-grab.
-    func restoreTrashedMeeting() async {
+    /// Undoes the latest trash operation. Every recoverable folder in the
+    /// captured batch moves back under the library's exclusive mutation lock.
+    func restoreTrashedMeetings() async {
         guard let window = pendingTrashUndo else { return }
         pendingTrashUndo = nil
         guard let runtime else {
-            report("The meeting could not be restored.")
+            report(window.items.count == 1
+                ? "The meeting could not be restored."
+                : "The meetings could not be restored.")
             return
         }
-        guard let trashedURL = window.trashedURL else {
-            report(
-                "\(window.title) was moved to the Trash. Restore it manually from the Finder."
-            )
-            return
-        }
-        do {
-            let layout = runtime.library.layout
-            let destination = layout.meetingDirectory(window.meetingID)
-            try LibraryMutationCoordination.withExclusiveAccess(layout: layout) {
-                guard !FileManager.default.fileExists(atPath: destination.path) else {
-                    throw CocoaError(.fileWriteFileExists)
-                }
-                try FileManager.default.moveItem(at: trashedURL, to: destination)
+
+        var restored: [UndoDeleteToastItem] = []
+        var failed: [UndoDeleteToastItem] = []
+        var destinationWasOccupied = false
+        var lastError: Error?
+
+        for item in window.items {
+            guard let trashedURL = item.trashedURL else {
+                failed.append(item)
+                continue
             }
+            let layout = runtime.library.layout
+            let destination = layout.meetingDirectory(item.meetingID)
+            do {
+                try LibraryMutationCoordination.withExclusiveAccess(layout: layout) {
+                    guard !FileManager.default.fileExists(atPath: destination.path) else {
+                        throw CocoaError(.fileWriteFileExists)
+                    }
+                    try FileManager.default.moveItem(at: trashedURL, to: destination)
+                }
+                restored.append(item)
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                destinationWasOccupied = true
+                lastError = error
+                failed.append(item)
+            } catch {
+                lastError = error
+                failed.append(item)
+            }
+        }
+
+        if !restored.isEmpty {
             await refreshMeetings()
-            selectedMeetingID = window.meetingID
-            report("\(window.title) was restored.", isError: false)
-        } catch let error as CocoaError where error.code == .fileWriteFileExists {
+        }
+
+        if window.items.count == 1, let item = window.items.first {
+            if failed.isEmpty {
+                selectedMeetingID = item.meetingID
+                report("\(item.title) was restored.", isError: false)
+            } else if item.trashedURL == nil {
+                report("\(item.title) was moved to the Trash. Restore it manually from the Finder.")
+            } else if destinationWasOccupied {
+                report("A folder already occupies the original location. \(item.title) is still in the Trash.")
+            } else if let lastError {
+                report(AppModel.message("The meeting could not be restored.", lastError))
+            } else {
+                report("The meeting could not be restored.")
+            }
+        } else if failed.isEmpty {
+            report("\(restored.count) meetings were restored.", isError: false)
+        } else if restored.isEmpty {
+            report("The meetings could not be restored automatically. They are still in the Trash.")
+        } else {
             report(
-                "A folder already occupies the original location. \(window.title) is still in the Trash."
+                "\(restored.count) meetings were restored. \(failed.count) remain in the Trash."
             )
-        } catch {
-            report(AppModel.message("The meeting could not be restored.", error))
         }
     }
 
@@ -715,7 +755,18 @@ final class AppModel {
             && !isBootstrappingPipeline
             && !isRecording
             && !isStartingRecording
+            && !isMovingMeetingsToTrash
             && !isResolvingRecordingPermissions
+    }
+
+    func beginMovingMeetingsToTrash() -> Bool {
+        guard !isMovingMeetingsToTrash else { return false }
+        isMovingMeetingsToTrash = true
+        return true
+    }
+
+    func finishMovingMeetingsToTrash() {
+        isMovingMeetingsToTrash = false
     }
 
     private var activeRecordingMeetingIDs: Set<MeetingID> {
