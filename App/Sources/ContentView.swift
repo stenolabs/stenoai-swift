@@ -15,16 +15,15 @@ struct ContentView: View {
     var body: some View {
         @Bindable var model = model
         NavigationSplitView {
-            MeetingSidebarView(selection: $model.selectedMeetingIDs)
-                // Shell status projection lives above the meetings column;
-                // the sidebar rows themselves stay untouched.
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    HomeStatusHeader(model: model)
-                }
-                .navigationSplitViewColumnWidth(
-                    min: 220,
-                    ideal: Steno.Layout.sidebarIdealWidth
-                )
+            WindowStableSidebar {
+                HomeStatusHeader(model: model)
+            } content: {
+                MeetingSidebarView(selection: $model.selectedMeetingIDs)
+            }
+            .navigationSplitViewColumnWidth(
+                min: 220,
+                ideal: Steno.Layout.sidebarIdealWidth
+            )
         } detail: {
             WindowStableDetail {
                 // Aufnahme ist ein Zustand des Meetings, kein Modus der App.
@@ -340,6 +339,38 @@ struct WindowStableDetail<Content: View>: View {
         GeometryReader { _ in
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// Keeps a dynamic sidebar header and its scrollable content inside the size
+/// proposed by `NavigationSplitView`. `GeometryReader` forms a one-way size
+/// boundary; inside it, a normal stack gives the list the remaining height
+/// without feeding the header's ideal height back into the split view.
+struct WindowStableSidebar<Header: View, Content: View>: View {
+    private let header: Header
+    private let content: Content
+
+    init(
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.header = header()
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                header
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: .top
+            )
         }
     }
 }
