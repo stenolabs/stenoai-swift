@@ -19,21 +19,36 @@ This implements the actionable follow-ups from [the initial five-area Fable revi
 
 | Suite | Result |
 | --- | --- |
-| StenoKit, `swift test --no-parallel` | 1,480 tests, 175 suites passed |
+| StenoKit, `swift test --no-parallel` | 1,485 tests, 175 suites passed |
 | macOS application | 436 tests, 56 suites passed |
 | iOS application, iPhone 17 simulator | 487 tests, 45 suites passed |
 | StenoiOSKit, iPhone 17 simulator | 35 tests, 5 suites passed |
 
-The initial parallel Swift run timed out in 12 short-deadline pipeline tests under concurrent build load. The complete serial rerun passed. Compilation and catalog failures found during integration were corrected before the final passing runs. `git diff --check` passed.
+The initial parallel Swift run timed out in 12 short-deadline pipeline tests under concurrent build load. The complete serial rerun passed. During the later review correction, one search-latency benchmark also exceeded its budget under concurrent Xcode build load; the complete serial run without competing builds passed. Compilation and catalog failures found during integration were corrected before the final passing runs. `git diff --check` passed.
 
 Visual checks used a separately identified, disposable macOS app with its own library and empty model directory. Home, draft creation without recording, the unique draft recording action, older Home dates, and synthetic meeting detail were inspected. No recording permission was requested and no model was installed or executed. Screenshots and test/reviewer logs are retained under `.build/current-run/ux-followup-evidence/` (ignored).
 
 ## Independent review and remaining limits
 
-All three attempted Fable follow-up reviews (audio, provenance, privacy/UX) returned a session-limit response, not a review. The earlier five-area Fable review remains available, but **these new changes have not received Fable's independent follow-up approval**. Do not describe the attempts as completed reviews. Retry after the service limit resets; review the final diff and screenshots, not the initial snapshot.
+After the initial session-limit failures, all three Fable reviews completed successfully on 2026-09-11 using `claude-fable-5-1`, against a verified 692-file source snapshot at `2f93482`. A fourth, focused review checked the resulting correction diff. These were source reviews, not new screenshot reviews or reviewer-run tests.
+
+Confirmed findings and corrections:
+
+- Abandoning a late track no longer pads its empty capture with minutes of silence. A dedicated discard operation only ends the streams.
+- Overflow is latched synchronously per pipeline, checked after draining, and reported during stop. The finalizer cannot miss it because a callback Task arrived late.
+- A registration failure closes all remaining writers before the caller attempts recovery. Captured files remain available.
+- A stale speaker-review reload remains pinned to the displayed review run. Transfer exports now use the same exact-revision binding as Markdown exports.
+- Confirming the external pre-meeting brief now resumes the remembered request. It uses destination-bound consent and rechecks the endpoint after asynchronous source collection, before synchronous provider resolution.
+- Draft recording has a matching confirmation title, button and explanation. Added archive roundtrip and corrected-transcript export tests.
+
+Fable's focused verdict was that the previous findings were corrected and the remaining points were non-blocking. Its additional recommendation to prevent `writerDidFail` from asynchronously discarding a rebound track during stop was applied directly after that review, matching the already-reviewed overflow guard. During stop, preserving the recorded prefix and reporting a failure is intentional; a concurrent discard would race registration. The final four-suite verification covers that last guard. Fable did not perform a further pass after the one-line guard and explanatory comment.
+
+The claimed missing translation for **Record into this note** was rejected: German and Traditional Chinese entries already existed and were verified in the catalog. The snapshot had omitted resources, which explains the reviewer's uncertainty. Notice construction failures for invalid endpoints were not reproduced; `TextModelSettings` validates endpoints on save and load. Recollecting sources after consent remains a conservative freshness choice.
+
+Recorded limits, not redesigned in this follow-up: crash recovery uses the persisted meeting language and does not recover an in-memory automatic-language estimate; downgrade handling for a future review schema is unchanged; the possible nontransactional job-directory scan race remains unproven and Fable recommended no fix without reproduction. The archive roundtrip concern is now covered by a test. Raw reviews, the reviewed diff and final test logs remain in the ignored evidence directory.
 
 No physical microphone, lid/wake, disk-full or live external-provider acceptance test was performed. Synthetic continuity, recovery, transport and revision fixtures establish the tested behavior, not hardware acceptance.
 
 The small, previously accepted native-undo retention limitation remains: an undo handle may remain in the model if the window's UndoManager discards its action independently. There is no duplicate restoration through a consumed handle. Optional Keychain policy changes and speculative inactive MCP exposure were not adopted as defects.
 
-No push, hosted-platform write, production replacement or merge into `main` was performed. The user's existing running Steno instance was left untouched. The required independent follow-up review remains a gate before consequential integration.
+No push, hosted-platform write, production replacement or merge into `main` was performed. The user's existing running Steno instance was left untouched. The independent follow-up review is complete; a merge or publication still requires its own authorization.

@@ -127,6 +127,14 @@ public actor TrackContinuity {
         }
     }
 
+    /// End an abandoned track without manufacturing a recording of silence.
+    public func discard() {
+        guard !isFinished else { return }
+        isFinished = true
+        writerContinuation.finish()
+        liveContinuation.finish()
+    }
+
     public func finish(at instant: ContinuousClock.Instant) {
         guard !isFinished else { return }
         fillSilence(until: instant)

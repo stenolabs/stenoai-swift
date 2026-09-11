@@ -253,7 +253,9 @@ extension AppModel {
             return updated
         } catch MeetingReviewController.ReviewActionError.stale {
             reviewError = String(localized: "The review state changed. The view has been reloaded; please try again.")
-            return await loadReviewData(meetingID: meetingID)
+            return try? await MeetingReviewAssembler.load(
+                library: runtime.library, meetingID: meetingID, diarizationRunID: data.runID
+            )
         } catch MeetingReviewController.ReviewActionError
             .demoMeetingCannotCreateVoiceEvidence {
             reviewError = Self.demoVoiceEvidenceRestrictionMessage

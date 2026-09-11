@@ -1,5 +1,6 @@
 @preconcurrency import AVFAudio
 import Foundation
+import Synchronization
 import StenoDomain
 import StenoLibrary
 
@@ -78,7 +79,12 @@ public actor RecordingSession {
         case source(AudioSourceEvent, at: ContinuousClock.Instant)
     }
 
+    private final class OverflowFlag: Sendable {
+        let value = Mutex(false)
+    }
+
     private struct TrackPipeline {
+        let overflow: OverflowFlag
         let timeline: TrackContinuity
         let ingressContinuation: AsyncStream<TrackIngressEvent>.Continuation
     }
@@ -379,6 +385,7 @@ public actor RecordingSession {
             of: LiveAudioEvent.self,
             bufferingPolicy: .bufferingNewest(ringCapacity)
         )
+        let overflow = OverflowFlag()
         let timeline = TrackContinuity(
             format: format,
             sessionStart: sharedSessionStart,
@@ -386,6 +393,7 @@ public actor RecordingSession {
             liveContinuation: livePair.continuation,
             alignFirstBufferToSessionStart: alignsFirstBuffer,
             writerOverflowHandler: { [weak self] in
+                overflow.value.withLock { $0 = true }
                 Task {
                     await self?.writerRingDidOverflow(track: track)
                 }
@@ -396,6 +404,7 @@ public actor RecordingSession {
             bufferingPolicy: .bufferingOldest(ringCapacity)
         )
         let pipeline = TrackPipeline(
+            overflow: overflow,
             timeline: timeline,
             ingressContinuation: ingressPair.continuation
         )
@@ -419,6 +428,7 @@ public actor RecordingSession {
                     at: .now
                 )
                 if case .dropped = pipeline.ingressContinuation.yield(event) {
+                    overflow.value.withLock { $0 = true }
                     Task {
                         await self?.writerRingDidOverflow(track: track)
                     }
@@ -428,6 +438,7 @@ public actor RecordingSession {
                 if case .dropped = pipeline.ingressContinuation.yield(
                     .source(event, at: .now)
                 ) {
+                    overflow.value.withLock { $0 = true }
                     Task {
                         await self?.writerRingDidOverflow(track: track)
                     }
@@ -458,7 +469,7 @@ public actor RecordingSession {
         pipeline?.ingressContinuation.finish()
         await ingressTask?.value
         if let pipeline {
-            await pipeline.timeline.finish(at: ContinuousClock.now)
+            await pipeline.timeline.discard()
         }
         await writerTask?.value
         if let writer {
@@ -594,6 +605,13 @@ public actor RecordingSession {
             await writerTasks[track]?.value
         }
 
+        // Callback Tasks may not have reached this actor yet. All producers
+        // have drained, so the synchronous flags are now authoritative.
+        for track in AudioTrack.allCases {
+            if pipelines[track]?.overflow.value.withLock({ $0 }) == true {
+                writerRingDidOverflow(track: track)
+            }
+        }
         var assets: [AudioTrack: MediaAsset] = [:]
         do {
             for track in AudioTrack.allCases {
@@ -629,6 +647,9 @@ public actor RecordingSession {
             state = pendingStopReason == .requested ? .stopped : .failed
             return completed
         } catch {
+            // Recovery must only see finalized files, even when registration
+            // of an earlier track failed. Preserve the original error.
+            for writer in writers.values { _ = try? await writer.close() }
             await endActivityIfNeeded()
             state = .failed
             throw error
@@ -639,14 +660,17 @@ public actor RecordingSession {
         // Same as above: a late overflow from an abandoned track must not end
         // a recording that is still running on another one.
         guard writers[track] != nil else { return }
-        if reboundTracks.contains(track) {
+        if reboundTracks.contains(track), state != .stopping {
             abandonReboundTrack(
                 track,
                 reason: .ringBufferOverflow(track: track)
             )
             return
         }
-        if state == .starting {
+        if state == .starting || state == .stopping {
+            if terminalError != .ringBufferOverflow(track: track) {
+                diagnostics.record(RecordingDiagnosticEvent(name: "writer-ring-overflow", details: ["track": track.rawValue]))
+            }
             pendingStopReason = .ringBufferOverflow(track)
             terminalError = .ringBufferOverflow(track: track)
             return
@@ -712,7 +736,10 @@ public actor RecordingSession {
     private func writerDidFail(track: AudioTrack, error: any Error) {
         // A track abandoned during start is no longer part of this session.
         guard writers[track] != nil else { return }
-        if reboundTracks.contains(track) {
+        // Once stop is draining, preserve every remaining capture for the
+        // finalizer. Starting a concurrent discard would race registration
+        // and could withdraw the error before the stop result is published.
+        if reboundTracks.contains(track), state != .stopping {
             abandonReboundTrack(track, reason: .writerFailed(
                 track: track,
                 message: error.localizedDescription

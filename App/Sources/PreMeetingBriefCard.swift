@@ -36,6 +36,8 @@ struct PreMeetingBriefCard: View {
     /// One confirmation per app session before the first external send,
     /// mirroring the live Ask bar and library chat.
     @State private var pendingExternalNotice: LocalizedExternalModelNotice?
+    @State private var pendingTarget: BriefTarget?
+    @State private var externalConsent = ExternalSendConsent()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -223,11 +225,17 @@ struct PreMeetingBriefCard: View {
     }
 
     private func requestBrief(for target: BriefTarget) {
-        guard textModelSettings.selectedEndpoint != nil else {
+        guard !externalConsent.permits(textModelSettings.selectedEndpoint) else {
             Task { await startBrief(for: target) }
             return
         }
+        pendingTarget = target
+        externalConsent.prepare(textModelSettings.selectedEndpoint)
         pendingExternalNotice = makeExternalNotice()
+        if pendingExternalNotice == nil {
+            pendingTarget = nil
+            model.report("The brief could not be prepared.")
+        }
     }
 
     /// Reuses the shared outbound disclosure unchanged, mapping only data
@@ -269,10 +277,15 @@ struct PreMeetingBriefCard: View {
                 Spacer()
                 Button("Cancel") {
                     pendingExternalNotice = nil
+                    pendingTarget = nil
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Prepare once, then keep going") {
                     pendingExternalNotice = nil
+                    guard let target = pendingTarget else { return }
+                    pendingTarget = nil
+                    _ = externalConsent.accept(current: textModelSettings.selectedEndpoint)
+                    requestBrief(for: target)
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -284,6 +297,7 @@ struct PreMeetingBriefCard: View {
     @MainActor
     private func startBrief(for target: BriefTarget) async {
         guard let service else { return }
+        let endpoint = textModelSettings.selectedEndpoint
         isPreparing = true
         defer { isPreparing = false }
 
@@ -301,15 +315,21 @@ struct PreMeetingBriefCard: View {
             names = await collectAttendeeNames(for: meeting)
         }
 
+        let sources = await collectSources()
+        guard textModelSettings.selectedEndpoint == endpoint,
+              externalConsent.permits(endpoint) else {
+            requestBrief(for: target)
+            return
+        }
         let budget = PreMeetingBriefBudget.budgetCharacters(
-            hosting: textModelSettings.selectedEndpoint?.hosting,
-            contextTokens: textModelSettings.selectedEndpoint?.contextWindowTokens
+            hosting: endpoint?.hosting,
+            contextTokens: endpoint?.contextWindowTokens
         )
         expanded = true
         service.prepare(
             targetTitle: title,
             targetAttendeeNames: names,
-            sources: await collectSources(),
+            sources: sources,
             characterBudget: budget,
             localeIdentifier: target.localeIdentifier
         )

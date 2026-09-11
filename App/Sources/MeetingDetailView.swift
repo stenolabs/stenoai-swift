@@ -275,14 +275,16 @@ struct MeetingDetailView: View {
             isPresented: $showContinueRecordingConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Continue Recording") {
+            Button(meeting?.status == .draft ? "Record into this note" : "Continue Recording") {
                 Task { await model.continueRecording(in: meetingID) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(
-                "New audio is appended after the existing recordings and transcribed into the same meeting."
-            )
+            if meeting?.status == .draft {
+                Text("Audio will be recorded and transcribed into this note.")
+            } else {
+                Text("New audio is appended after the existing recordings and transcribed into the same meeting.")
+            }
         }
     }
 
@@ -300,7 +302,8 @@ struct MeetingDetailView: View {
     }
 
     var continueRecordingTitle: String {
-        "Continue recording in \u{201C}\(meeting?.title ?? "")\u{201D}?"
+        if meeting?.status == .draft { return String(localized: "Record into this note?") }
+        return "Continue recording in \u{201C}\(meeting?.title ?? "")\u{201D}?"
     }
 
     private var detailCommandContext: MacMeetingDetailCommandContext {

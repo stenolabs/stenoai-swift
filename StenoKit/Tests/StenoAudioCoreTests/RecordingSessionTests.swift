@@ -7,6 +7,40 @@ import Testing
 
 @Suite("RecordingSession")
 struct RecordingSessionTests {
+    @Test("registration failure closes the remaining capture writer before recovery")
+    func registrationFailureClosesAllWriters() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try Library.open(at: root.appendingPathComponent("Library"))
+        let meeting = try await library.createMeeting(title: "Synthetic failure", status: .recording)
+        let log = SourceLifecycleLog()
+        let session = RecordingSession(meetingID: meeting.id, library: library, outputDirectory: root.appendingPathComponent("Capture"), sources: [.microphone: FakeAudioSource(track: .microphone), .system: FakeAudioSource(track: .system)], activityManager: FakeActivityManager(), availableDiskBytes: { _ in 3_000_000_000 }, writerFactory: { url, format in
+            CloseTrackingWriter(underlying: try TrackWriter(url: url, sourceFormat: format), log: log)
+        })
+        try await session.start()
+        try Data("{".utf8).write(to: library.layout.meetingMetadata(meeting.id))
+        await #expect(throws: (any Error).self) { _ = try await session.stop() }
+        #expect(log.events.contains { $0.contains("-microphone-") })
+        #expect(log.events.contains { $0.contains("-system-") })
+    }
+
+    @Test("overflow while a source drains on stop cannot report a clean stop")
+    func overflowDuringStopIsPreserved() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try Library.open(at: root.appendingPathComponent("Library"))
+        let meeting = try await library.createMeeting(title: "Synthetic drain", status: .recording)
+        let gate = StopDrainGate()
+        let source = BurstOnStopSource(gate: gate)
+        let session = RecordingSession(meetingID: meeting.id, library: library, outputDirectory: root.appendingPathComponent("Capture"), sources: [.microphone: source], activityManager: FakeActivityManager(), ringCapacity: 1, availableDiskBytes: { _ in 3_000_000_000 }, writerFactory: { url, format in
+            GatedDrainWriter(underlying: try TrackWriter(url: url, sourceFormat: format), gate: gate)
+        })
+        try await session.start()
+        let result = try await session.stop()
+        #expect(result.stopReason == .ringBufferOverflow(.microphone))
+        #expect(await session.state == .failed)
+    }
+
     @Test("fans both fake sources out to CAF files and an independent live stream")
     func recordsAndStreams() async throws {
         let directory = try temporaryDirectory()
@@ -460,6 +494,52 @@ struct RecordingSessionTests {
         let events = await collect(liveStream)
         #expect(eventKinds(events).contains(.buffer) == false)
     }
+}
+
+private actor CloseTrackingWriter: AudioTrackWriting {
+    nonisolated var url: URL { underlying.url }
+    let underlying: TrackWriter
+    let log: SourceLifecycleLog
+    init(underlying: TrackWriter, log: SourceLifecycleLog) { self.underlying = underlying; self.log = log }
+    func write(_ buffer: sending AVAudioPCMBuffer) async throws { try await underlying.write(buffer) }
+    func close() async throws -> TrackWriteSummary {
+        let summary = try await underlying.close()
+        log.append(url.lastPathComponent)
+        return summary
+    }
+}
+
+private actor StopDrainGate {
+    var opened = false
+    var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func open() { opened = true; for waiter in waiters { waiter.resume() }; waiters.removeAll() }
+}
+
+private actor BurstOnStopSource: AudioSource {
+    nonisolated let track = AudioTrack.microphone
+    let gate: StopDrainGate
+    var handler: AudioBufferHandler?
+    init(gate: StopDrainGate) { self.gate = gate }
+    func prepare() -> AVAudioFormat { syntheticBuffer().format }
+    func start(bufferHandler: @escaping AudioBufferHandler) { handler = bufferHandler }
+    func stop() async {
+        for _ in 0..<256 { handler?(syntheticBuffer(frames: 1)) }
+        handler = nil
+        await gate.open()
+    }
+}
+
+private actor GatedDrainWriter: AudioTrackWriting {
+    nonisolated var url: URL { underlying.url }
+    let underlying: TrackWriter
+    let gate: StopDrainGate
+    init(underlying: TrackWriter, gate: StopDrainGate) { self.underlying = underlying; self.gate = gate }
+    func write(_ buffer: sending AVAudioPCMBuffer) async throws { await gate.wait(); try await underlying.write(buffer) }
+    func close() async throws -> TrackWriteSummary { try await underlying.close() }
 }
 
 private enum LiveEventKind: Equatable, Sendable {

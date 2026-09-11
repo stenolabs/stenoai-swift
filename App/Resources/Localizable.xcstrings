@@ -11664,6 +11664,54 @@
           }
         }
       }
+    },
+    "The brief could not be prepared.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Meeting-Vorbereitung konnte nicht erstellt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法準備會前摘要。"
+          }
+        }
+      }
+    },
+    "Audio will be recorded and transcribed into this note.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio wird aufgenommen und in diese Notiz transkribiert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音訊將錄製並轉錄至此筆記。"
+          }
+        }
+      }
+    },
+    "Record into this note?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In diese Notiz aufnehmen?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音至此筆記？"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -5,6 +5,16 @@ import Testing
 
 @Suite("TrackContinuity")
 struct TrackContinuityTests {
+    @Test("discarding an unbound late track does not synthesize silence")
+    func discardDoesNotPad() async {
+        let writer = AsyncStream.makeStream(of: TrackWriteEvent.self)
+        let live = AsyncStream.makeStream(of: LiveAudioEvent.self)
+        let timeline = TrackContinuity(format: syntheticBuffer().format, sessionStart: .now.advanced(by: .seconds(-600)), writerContinuation: writer.continuation, liveContinuation: live.continuation, alignFirstBufferToSessionStart: true, writerOverflowHandler: {})
+        await timeline.discard()
+        let captured = await captureWriter(writer.stream)
+        #expect(captured.frameCount == 0)
+    }
+
     @Test("a full writer ring reports rejected final silence")
     func finalSilenceOverflowIsVisible() async {
         let writer = AsyncStream.makeStream(of: TrackWriteEvent.self, bufferingPolicy: .bufferingOldest(1))

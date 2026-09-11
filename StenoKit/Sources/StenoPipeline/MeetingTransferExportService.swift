@@ -352,7 +352,7 @@ public struct MeetingTransferExportService: Sendable {
         if let revision {
             let review = try await MeetingReviewAssembler.load(
                 library: library,
-                meetingID: meetingID
+                revision: revision
             )
             let persons = if let review {
                 review.persons
