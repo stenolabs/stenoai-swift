@@ -1208,7 +1208,7 @@ struct OpenAICompatibleProviderTests {
         _ = try await context.provider.generate(
             template: .meetingMinutes,
             request: .map(TranscriptChunk(turns: [])),
-            context: RenderContext(userNotes: "Frau Baumann, KAAW GmbH")
+            context: RenderContext(userNotes: "Alex Example, Example Company")
         )
 
         let body = try requestJSON(try #require(recorder.requests.first))
