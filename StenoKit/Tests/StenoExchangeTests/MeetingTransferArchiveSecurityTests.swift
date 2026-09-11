@@ -6,18 +6,7 @@ import Synchronization
 import Testing
 @testable import StenoExchange
 
-/// The malformed-header fixtures below rely on AppleArchive surfacing decode
-/// errors. On macOS 27 betas the framework instead aborts the process while
-/// decoding such headers (AppleArchive `ArchiveHeader.swift:147`), so the
-/// suite is skipped there; the validation contract still holds on shipping
-/// macOS 26 and must be re-enabled once the framework regains error paths.
-private let appleArchiveTrapsOnMalformedHeaders =
-    ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
-
-@Suite(
-    "Meeting transfer archive security",
-    .disabled(if: appleArchiveTrapsOnMalformedHeaders)
-)
+@Suite("Meeting transfer archive security")
 struct MeetingTransferArchiveSecurityTests {
 
     @Test("validation rejects a directory and an outer archive symlink")
@@ -256,7 +245,7 @@ struct MeetingTransferArchiveSecurityTests {
         )
     }
 
-    @Test("validation rejects integer overflow and oversized logical files before data reads")
+    @Test("validation rejects unrepresentable sizes and oversized logical files before data reads")
     func rejectsUnsafeDeclaredSizes() async throws {
         let base = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: base) }
@@ -268,15 +257,34 @@ struct MeetingTransferArchiveSecurityTests {
                 .uint("TYP", UInt64(ArchiveHeader.EntryType.regularFile.rawValue)),
                 .string("PAT", "notes.md"),
                 .uint("SIZ", UInt64.max),
-                .blob("DAT", UInt64.max),
+                .blob("DAT", 0),
             ],
             blobs: []
         )
         try writeTransferRawArchive([manifest, overflow], to: overflowURL)
         await expectValidationError(
-            .integerOverflow("notes.md"),
+            .sizeMismatch("notes.md"),
             at: overflowURL,
             validationRoot: makeTransferTestRoot(under: base, name: "validation-overflow")
+        )
+
+        // AppleArchive.append traps for an unrepresentable blob size. Build
+        // that malformed field as raw bytes to exercise the reader instead.
+        var rawOverflow = transferRawArchiveData([overflow])
+        let dataField = try #require(rawOverflow.range(of: Data([0x44, 0x41, 0x54, 0x41, 0, 0])))
+        rawOverflow.replaceSubrange(dataField, with: Data([0x44, 0x41, 0x54, 0x43] + Array(repeating: UInt8.max, count: 8)))
+        let headerSize = UInt16(rawOverflow.count)
+        rawOverflow[4] = UInt8(truncatingIfNeeded: headerSize)
+        rawOverflow[5] = UInt8(truncatingIfNeeded: headerSize >> 8)
+        let rawOverflowURL = base.appendingPathComponent("raw-overflow.stenomeeting")
+        try writeTransferRawArchiveBytes(
+            transferRawArchiveData([manifest]) + rawOverflow,
+            to: rawOverflowURL
+        )
+        await expectValidationError(
+            .trailingGarbage,
+            at: rawOverflowURL,
+            validationRoot: makeTransferTestRoot(under: base, name: "validation-raw-overflow")
         )
 
         let largeURL = base.appendingPathComponent("large-logical.stenomeeting")
