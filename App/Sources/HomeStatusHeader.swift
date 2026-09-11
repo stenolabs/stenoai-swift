@@ -246,7 +246,8 @@ struct HomeStatusHeader: View {
                     .foregroundStyle(tint)
                 Text(title)
                     .font(.callout.weight(.medium))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                 Spacer()
             }
             .contentShape(Rectangle())

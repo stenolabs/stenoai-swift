@@ -15,7 +15,7 @@ struct MeetingSidebarView: View {
     @State private var isCreatingFolder = false
     @State private var newFolderParentID: FolderID?
     @State private var query = ""
-    @State private var searchScope: MeetingSidebarSearchScope = .titles
+    @State private var searchScope: MeetingSidebarSearchScope = .allContent
     @State private var contentHits: [MeetingSidebarContentHit] = []
     @State private var contentSearchTask: Task<Void, Never>?
     @State private var contentIndexStore: MeetingSidebarContentIndexStore?
@@ -151,15 +151,17 @@ struct MeetingSidebarView: View {
             prompt: searchScope == .titles ? "Search Titles" : "Search All Content"
         )
         .safeAreaInset(edge: .top, spacing: 0) {
-            Picker("Search scope", selection: $searchScope) {
-                Text("Titles").tag(MeetingSidebarSearchScope.titles)
-                Text("All Content").tag(MeetingSidebarSearchScope.allContent)
+            if isSearching {
+                Picker("Search scope", selection: $searchScope) {
+                    Text("Titles").tag(MeetingSidebarSearchScope.titles)
+                    Text("All Content").tag(MeetingSidebarSearchScope.allContent)
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                .labelsHidden()
+                .padding(.horizontal, Steno.Space.s)
+                .padding(.top, Steno.Space.xs)
             }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .labelsHidden()
-            .padding(.horizontal, Steno.Space.s)
-            .padding(.top, Steno.Space.xs)
         }
         .overlay {
             if model.meetings.isEmpty, model.folders.isEmpty {

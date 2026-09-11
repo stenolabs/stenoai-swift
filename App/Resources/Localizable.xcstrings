@@ -9543,7 +9543,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bei 1 Meeting sind Sprecher zu prüfen"
+            "value": "Sprecher prüfen · 1 Meeting"
           }
         },
         "zh-Hant": {
@@ -9566,7 +9566,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bei %lld Meetings sind Sprecher zu prüfen"
+            "value": "Sprecher prüfen · %lld Meetings"
           }
         },
         "zh-Hant": {
@@ -11805,6 +11805,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "錄音決定已變更。請重新開啟會議。"
+          }
+        }
+      }
+    },
+    "Prepare brief…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting vorbereiten…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備會議摘要…"
+          }
+        }
+      }
+    },
+    "Prepare a brief from your prior notes": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting anhand bisheriger Notizen vorbereiten"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "根據先前筆記準備會議摘要"
+          }
+        }
+      }
+    },
+    "Collapse and cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einklappen und abbrechen"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收合並取消"
+          }
+        }
+      }
+    },
+    "Prepare once, then keep going": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal vorbereiten, danach fortfahren"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備一次，然後繼續"
           }
         }
       }
