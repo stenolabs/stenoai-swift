@@ -147,13 +147,14 @@ struct MeetingSidebarStateTests {
         ).isEmpty)
     }
 
-    @Test("multi-selection exposes only its common move action")
+    @Test("multi-selection exposes its common move and trash actions")
     func derivesSelectionActions() {
         let a = meetingID(1)
         let b = meetingID(2)
 
         #expect(MeetingSidebarActionPolicy.actions(for: [a, b]) == [
             .moveMeetings,
+            .trash,
         ])
         #expect(MeetingSidebarActionPolicy.actions(for: [a]) == [
             .rename,
@@ -163,6 +164,22 @@ struct MeetingSidebarStateTests {
             .trash,
         ])
         #expect(MeetingSidebarActionPolicy.actions(for: []).isEmpty)
+    }
+
+    @Test("trash confirmation snapshots every selected meeting")
+    func snapshotsTrashConfirmation() throws {
+        let first = meeting(1)
+        let second = meeting(2)
+
+        let request = try #require(MeetingTrashRequest(meetings: [first, second]))
+
+        #expect(request.meetingIDs == [first.id, second.id])
+        #expect(localizedEnglish(request.confirmationTitle)
+            == "Move 2 Meetings to the Trash?")
+        #expect(localizedEnglish(request.actionTitle)
+            == "Move 2 Meetings to Trash")
+        #expect(localizedEnglish(request.menuTitle)
+            == "Move 2 Meetings to Trash…")
     }
 
     @Test("sidebar actions follow contextual availability")
@@ -433,6 +450,14 @@ struct MeetingSidebarStateTests {
 
     private func meetingID(_ value: Int) -> MeetingID {
         MeetingID(rawValue: uuid(value))
+    }
+
+    private func localizedEnglish(
+        _ resource: LocalizedStringResource
+    ) -> String {
+        var resource = resource
+        resource.locale = Locale(identifier: "en")
+        return String(localized: resource)
     }
 
     private func folderID(_ value: Int) -> FolderID {

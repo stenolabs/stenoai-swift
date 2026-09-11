@@ -48,6 +48,39 @@ struct CaptureRecoveryTests {
         return url
     }
 
+    @Test("newly adopted audio is not hidden by a previously finished transcription")
+    func adoptedAudioQueuesFreshJob() async throws {
+        let (library, jobStore, root) = try makeLibrary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let meeting = try await library.createMeeting(title: "Synthetic recovery", status: .interrupted)
+        let previous = Job.finalASR(for: meeting)
+        try await jobStore.enqueue(previous)
+        _ = try await jobStore.transition(previous.id, to: .running)
+        _ = try await jobStore.transition(previous.id, to: .finished)
+        _ = try writeCaptureFile(library, meetingID: meeting.id, track: .system)
+        _ = try await CaptureRecovery.run(library: library, jobStore: jobStore)
+        let jobs = try await jobStore.list()
+        #expect(jobs.count == 2)
+        #expect(jobs.contains { $0.id != previous.id && $0.status == .queued })
+    }
+
+    @Test("stop recovery can adopt before the caller schedules transcription")
+    func callerOwnsScheduling() async throws {
+        let (library, jobStore, root) = try makeLibrary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let meeting = try await library.createMeeting(title: "Synthetic recovery", status: .interrupted)
+        _ = try writeCaptureFile(library, meetingID: meeting.id, track: .system)
+        let report = try await CaptureRecovery.run(library: library, jobStore: jobStore, onlyMeetingID: meeting.id, scheduleJobs: false)
+        #expect(report.failures.isEmpty)
+        #expect(report.adoptedMeetings.count == 1)
+        #expect(try await jobStore.list().isEmpty)
+        #expect(try await library.listMediaAssets(meetingID: meeting.id).count == 1)
+        // Simulate a restart after adoption but before the caller enqueues.
+        let restarted = try await CaptureRecovery.run(library: library, jobStore: jobStore)
+        #expect(restarted.failures.isEmpty)
+        #expect(try await jobStore.list().count == 1)
+    }
+
     @Test("sweep without assets enqueues nothing, adoption registers and queues")
     func adoptionAfterHardCrash() async throws {
         let (library, jobStore, root) = try makeLibrary()
@@ -226,6 +259,51 @@ struct CaptureRecoveryTests {
                 && $0.stage == .captureFile
         })
         #expect(FileManager.default.fileExists(atPath: unreadable.path))
-        #expect(try await jobStore.list().count == 1)
+        #expect(try await jobStore.list().isEmpty)
+    }
+
+    @Test("a capture file set aside during start is never adopted as a track")
+    func ignoresSetAsideCaptureFiles() {
+        let live = "01a03d4c-microphone-911619D3.caf"
+        let setAside = "01a03d4c-microphone-911619D3.caf.discarded"
+
+        #expect(CaptureRecovery.trackFromCaptureFileName(live) == .microphone)
+        // The user was told this track was not recorded. Adopting it after a
+        // later crash would hand back a recording that was never claimed.
+        #expect(CaptureRecovery.trackFromCaptureFileName(setAside) == nil)
+    }
+
+    @Test("a capture file without audio is reported instead of adopted")
+    func doesNotAdoptAnEmptyCaptureFile() async throws {
+        let (library, jobStore, root) = try makeLibrary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let meeting = try await library.createMeeting(
+            title: "Empty",
+            status: .interrupted
+        )
+        // What an abandoned track leaves behind when setting it aside failed:
+        // a correctly named file that never received a single frame.
+        let empty = try writeCaptureFile(
+            library,
+            meetingID: meeting.id,
+            track: .microphone,
+            seconds: 0
+        )
+        _ = try writeCaptureFile(
+            library,
+            meetingID: meeting.id,
+            track: .system
+        )
+
+        let report = try await CaptureRecovery.run(
+            library: library,
+            jobStore: jobStore
+        )
+
+        let adopted = try #require(report.adoptedMeetings.first)
+        #expect(adopted.adoptedTracks == [.system])
+        #expect(report.failures.contains {
+            $0.fileName == empty.lastPathComponent
+        })
     }
 }

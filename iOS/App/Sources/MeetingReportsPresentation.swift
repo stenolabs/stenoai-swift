@@ -304,13 +304,32 @@ struct MeetingReportsViewState: Equatable {
         hasReport ? "Regenerate" : "Generate minutes"
     }
 
-    static func copyText(for report: StoredTemplateResult?) -> String? {
-        report?.result.markdown
+    /// The minutes as text for the clipboard.
+    ///
+    /// Carries the incompleteness note when a track is missing: the label on
+    /// screen does not travel with copied text, and minutes that leave out one
+    /// side of a conversation must not read like complete ones.
+    static func copyText(
+        for report: StoredTemplateResult?,
+        unrecordedTracks: [MediaAsset.Kind] = []
+    ) -> String? {
+        guard let report else { return nil }
+        guard let note = MeetingMarkdown.incompleteRecordingNote(
+            unrecordedTracks
+        ) else {
+            return report.result.markdown
+        }
+        return "\(note)\n\n\(report.result.markdown)"
     }
 
     static func sharePayload(
-        for report: StoredTemplateResult?
+        for report: StoredTemplateResult?,
+        unrecordedTracks: [MediaAsset.Kind] = []
     ) -> ReportSharePayload? {
-        report.map(ReportSharePayload.init)
+        guard let text = copyText(
+            for: report,
+            unrecordedTracks: unrecordedTracks
+        ) else { return nil }
+        return ReportSharePayload(text: text)
     }
 }

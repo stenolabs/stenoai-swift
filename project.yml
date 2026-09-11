@@ -132,5 +132,10 @@ schemes:
     test:
       targets:
         - StenoTests
+      # Pinned so a test never depends on the language the developer's Mac
+      # happens to run in: user-facing strings are localized, and asserting on
+      # them would otherwise pass or fail by accident.
+      language: en
+      region: US
       environmentVariables:
         STENO_TEST_ISOLATE_TEXT_MODEL_REGISTRY: "1"

@@ -78,6 +78,9 @@ struct MeetingDetailView: View {
     @State private var observationState = MeetingDetailObservationState()
     @State private var showMeetingTransferExport = false
     @State private var showContinueRecordingConfirmation = false
+    @State private var shortRecording: ShortRecordingDecision?
+    @State private var dismissedShortRecording: JobID?
+    @State private var isConfirmingShortRecording = false
     /// Kurzer Bestaetigungsblitz nach dem Kopieren der Notizen: das Icon im
     /// Werkzeugkasten zeigt fuer einen Moment den Haken statt der Aktion.
     @State private var showsCopyNotesFlash = false
@@ -112,6 +115,7 @@ struct MeetingDetailView: View {
                     Divider()
                 }
                 meetingTransferTopStatus
+                shortRecordingBanner
                 pendingBanner
                 legacyUpgradeTopStatus
                 jobStatusBar
@@ -126,7 +130,9 @@ struct MeetingDetailView: View {
         }
         .navigationTitle(meeting?.title ?? "")
         .navigationSubtitle(subtitle)
+        .frame(minWidth: 560)
         .inspector(isPresented: $showInspector) { inspectorContent }
+        .preference(key: MainDetailMinimumWidthKey.self, value: showInspector ? 560 + 300 + 1 : 560)
         .toolbar(id: MacToolbarID.meetingDetail.rawValue) {
             ToolbarItem(
                 id: MacToolbarItemID.findTranscript.rawValue,
@@ -211,7 +217,10 @@ struct MeetingDetailView: View {
                     Button {
                         showContinueRecordingConfirmation = true
                     } label: {
-                        Label("Continue Recording", systemImage: "record.circle")
+                        Label(
+                            meeting?.status == .draft ? "Record into this note" : "Continue Recording",
+                            systemImage: meeting?.status == .draft ? "mic" : "record.circle"
+                        )
                     }
                     .help("Record additional audio into this meeting")
                 }
@@ -242,6 +251,9 @@ struct MeetingDetailView: View {
         // Benutzer haette bis dahin in ein totes Feld getippt.
         .onChange(of: transcriptQuery) { editingTurn = nil }
         .onChange(of: revision?.id) { editingTurn = nil }
+        .onChange(of: model.isRecording) {
+            observationState.restartAfterManualProcessingRequest()
+        }
         // Citation buttons in the minutes post this; scroll the cited turn
         // into view and let the highlight decay below.
         .onReceive(
@@ -272,14 +284,16 @@ struct MeetingDetailView: View {
             isPresented: $showContinueRecordingConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Continue Recording") {
+            Button(meeting?.status == .draft ? "Record into this note" : "Continue Recording") {
                 Task { await model.continueRecording(in: meetingID) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(
-                "New audio is appended after the existing recordings and transcribed into the same meeting."
-            )
+            if meeting?.status == .draft {
+                Text("Audio will be recorded and transcribed into this note.")
+            } else {
+                Text("New audio is appended after the existing recordings and transcribed into the same meeting.")
+            }
         }
     }
 
@@ -297,7 +311,8 @@ struct MeetingDetailView: View {
     }
 
     var continueRecordingTitle: String {
-        "Continue recording in \u{201C}\(meeting?.title ?? "")\u{201D}?"
+        if meeting?.status == .draft { return String(localized: "Record into this note?") }
+        return "Continue recording in \u{201C}\(meeting?.title ?? "")\u{201D}?"
     }
 
     private var detailCommandContext: MacMeetingDetailCommandContext {
@@ -643,6 +658,8 @@ struct MeetingDetailView: View {
             in: revision,
             query: transcriptQuery
         )
+        var seenSpeakers: Set<SpeakerReference?> = []
+        let originCueIndices = Set(hits.filter { seenSpeakers.insert(revision.turns[$0].speaker).inserted })
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Steno.Space.m) {
@@ -660,7 +677,7 @@ struct MeetingDetailView: View {
                             meeting: meeting
                         )
                     }
-                    ReportsSection(meetingID: meetingID, review: review)
+                    ReportsSection(meetingID: meetingID, review: review, unrecordedTracks: meeting?.unrecordedTracks ?? [])
                     Divider()
                     if isSearchingTranscript {
                         Text(hits.isEmpty
@@ -675,6 +692,7 @@ struct MeetingDetailView: View {
                             turn: turn,
                             review: review,
                             presentationContext: speakerPresentationContext,
+                            showsOriginCue: originCueIndices.contains(index),
                             meetingID: meetingID,
                             isEditing: editingTurn == index,
                             beginEditing: { editingTurn = index },
@@ -819,10 +837,15 @@ struct MeetingDetailView: View {
                 Spacer()
                 Button("Use the new one") {
                     Task {
-                        if await model.adoptPendingTranscript(for: meetingID) {
-                            self.pending = nil
-                            revision = await model.transcript(for: meetingID)
-                        }
+                        guard let displayed = revision else { return }
+                        _ = await model.adoptPendingTranscript(
+                            for: meetingID,
+                            expectedCurrentRevisionID: displayed.id,
+                            expectedCandidateID: pending.id
+                        )
+                        revision = await model.transcript(for: meetingID)
+                        self.pending = await model.pendingTranscript(for: meetingID)
+                        review = await model.loadReviewData(meetingID: meetingID, revision: revision)
                     }
                 }
                 .controlSize(.small)
@@ -848,16 +871,21 @@ struct MeetingDetailView: View {
         if meeting.status != .ready {
             parts.append(statusWord(meeting.status))
         }
+        if let missing = MeetingCompleteness.missingTracksWord(
+            meeting.unrecordedTracks
+        ) {
+            parts.append(missing)
+        }
         return parts.joined(separator: "  ·  ")
     }
 
     private func statusWord(_ status: Meeting.Status) -> String {
         switch status {
-        case .draft: "Draft"
-        case .recording: "Recording"
-        case .interrupted: "Interrupted"
-        case .processing: "Processing"
-        case .ready: "Ready"
+        case .draft: String(localized: "Draft")
+        case .recording: String(localized: "Recording")
+        case .interrupted: String(localized: "Interrupted")
+        case .processing: String(localized: "Processing")
+        case .ready: String(localized: "Ready")
         }
     }
 
@@ -1090,13 +1118,47 @@ struct MeetingDetailView: View {
         }
     }
 
-    private var pendingDescription: String {
+    private var pendingDescription: LocalizedStringResource {
         if meeting?.status == .draft {
             "Write your notes on the right. Start a recording when the meeting begins."
         } else if jobs.contains(where: { $0.status == .running || $0.status == .queued }) {
             "The final transcription is still running."
         } else {
             "There is no transcript for this meeting."
+        }
+    }
+
+    @ViewBuilder
+    private var shortRecordingBanner: some View {
+        if let decision = shortRecording, dismissedShortRecording != decision.job.id,
+           !model.isRecording, !model.isStartingRecording {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("That was a short recording.").font(.headline)
+                Text("Your audio is saved. Would you like to transcribe it anyway?")
+                HStack {
+                    Button("Transcribe") {
+                        isConfirmingShortRecording = true
+                        Task {
+                            _ = await model.transcribeShortRecording(decision)
+                            shortRecording = await model.shortRecordingDecision(for: meetingID)
+                            isConfirmingShortRecording = false
+                            observationState.restartAfterManualProcessingRequest()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if decision.continuesExistingMeeting {
+                        Button("Later") { dismissedShortRecording = decision.job.id }
+                    } else {
+                        Button("Move to Trash") {
+                            Task { await model.deleteMeetings([meetingID]) }
+                        }
+                    }
+                }
+                .disabled(isConfirmingShortRecording || model.isMovingMeetingsToTrash)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial)
         }
     }
 
@@ -1109,8 +1171,9 @@ struct MeetingDetailView: View {
             )
             revision = await model.transcript(for: meetingID)
             jobs = await model.jobs(for: meetingID)
-            review = await model.loadReviewData(meetingID: meetingID)
+            review = await model.loadReviewData(meetingID: meetingID, revision: revision)
             meeting = await model.meeting(meetingID)
+            shortRecording = await model.shortRecordingDecision(for: meetingID)
             updateTransferDetail(
                 await model.loadMeetingTransferDetail(meetingID: meetingID)
             )
@@ -1268,6 +1331,7 @@ struct TranscriptTurnRow: View {
     let turn: TranscriptTurn
     let review: MeetingReviewData?
     var presentationContext: SpeakerPresentationContext = .empty
+    var showsOriginCue = true
     let meetingID: MeetingID
     var isEditing = false
     var beginEditing: (() -> Void)?
@@ -1328,10 +1392,18 @@ struct TranscriptTurnRow: View {
                             .foregroundStyle(.secondary)
                     }
                     if let cue = SpeakerDisplayLocalization.originCue(presentation) {
-                        Label(cue, systemImage: "text.badge.checkmark")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel(cue)
+                        if showsOriginCue {
+                            Label(cue, systemImage: "text.badge.checkmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(cue)
+                        } else {
+                            Image(systemName: "text.badge.checkmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .help(Text(cue))
+                                .accessibilityLabel(cue)
+                        }
                     }
                 }
                 if isEditing {

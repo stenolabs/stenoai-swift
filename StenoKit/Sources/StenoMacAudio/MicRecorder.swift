@@ -14,8 +14,19 @@ public actor MicRecorder: AudioSource {
         label: "org.steno.microphone-device-listener",
         qos: .userInitiated
     )
-    private var initialEngine: AVAudioEngine?
-    private let selectedDeviceUID: String
+    /// Resolves which microphone to bind, asked again on every attempt.
+    ///
+    /// Not a fixed identifier: a recording is usually started before joining
+    /// the call, and the automatic choice looks for the microphone a meeting
+    /// app is using. Pinning the answer at construction time made that choice
+    /// permanent, so a recording started one moment too early could never get
+    /// its microphone - not even when the call started seconds later.
+    private let resolveDeviceUID: @Sendable () async -> String?
+    private var selectedDeviceUID: String = ""
+    private let stabilityPolicy: MicrophoneStabilityPolicy
+    private let listDevices: @Sendable () -> [CoreAudioInputDevice]
+    private let diagnostics: any RecordingDiagnosticsRecording
+    private let stabilityTimeline: any StabilityTimeline
     private var preparedEngine = PreparedMicEngineState()
     private var activeCapture: MicEngineCapture?
     private var format: AVAudioFormat?
@@ -38,11 +49,30 @@ public actor MicRecorder: AudioSource {
     )
 
     public init(
-        engine: AVAudioEngine = AVAudioEngine(),
-        selectedDeviceUID: String
+        resolveDeviceUID: @escaping @Sendable () async -> String?,
+        diagnostics: any RecordingDiagnosticsRecording = NullRecordingDiagnostics()
     ) {
-        initialEngine = engine
-        self.selectedDeviceUID = selectedDeviceUID
+        self.resolveDeviceUID = resolveDeviceUID
+        stabilityPolicy = .standard
+        listDevices = { (try? CoreAudioInputDevice.availableDevices()) ?? [] }
+        self.diagnostics = diagnostics
+        stabilityTimeline = RealStabilityTimeline()
+    }
+
+    /// Injects the device list and the waiting policy so the start path can be
+    /// exercised without real Core Audio hardware.
+    init(
+        resolveDeviceUID: @escaping @Sendable () async -> String?,
+        stabilityPolicy: MicrophoneStabilityPolicy,
+        listDevices: @escaping @Sendable () -> [CoreAudioInputDevice],
+        diagnostics: any RecordingDiagnosticsRecording,
+        timeline: any StabilityTimeline = RealStabilityTimeline()
+    ) {
+        self.resolveDeviceUID = resolveDeviceUID
+        self.stabilityPolicy = stabilityPolicy
+        self.listDevices = listDevices
+        self.diagnostics = diagnostics
+        stabilityTimeline = timeline
     }
 
     public func prepare() async throws -> AVAudioFormat {
@@ -55,7 +85,15 @@ public actor MicRecorder: AudioSource {
         }
         var capture: MicEngineCapture?
         do {
-            let device = try await stableSelectedInput(uid: selectedDeviceUID)
+            // Asked again every time, so a microphone that appears later can
+            // still join the recording that is already running.
+            guard let uid = await resolveDeviceUID() else {
+                throw AudioRecordingError.audioSourceUnavailable(
+                    "no microphone is available yet"
+                )
+            }
+            selectedDeviceUID = uid
+            let device = try await stableSelectedInput(uid: uid)
             let preparedCapture = makeCapture(announcesRecovery: false)
             capture = preparedCapture
             activeCapture = preparedCapture
@@ -71,6 +109,21 @@ public actor MicRecorder: AudioSource {
                 )
             }
             _ = preparedEngine.prepare(deviceID: device.id) { _ in nativeFormat }
+            // How long binding the device actually took. This is the number
+            // that decided between a recording and a lost microphone track:
+            // through AVAudioEngine it was over 3000 ms on a device another app
+            // was holding, because reaching the input node opened the default
+            // device first.
+            diagnostics.record(RecordingDiagnosticEvent(
+                name: "microphone-bound",
+                details: [
+                    "uid": selectedDeviceUID,
+                    "deviceID": "\(device.id)",
+                    "sampleRate": "\(Int(nativeFormat.sampleRate))",
+                    "bindMilliseconds":
+                        "\(preparedCapture.lastPhaseDuration.wholeMilliseconds)",
+                ]
+            ))
             format = nativeFormat
             pinnedDevice = PinnedInputDeviceState(device: device)
             liveness = InputLivenessState(startedAt: .now)
@@ -89,25 +142,54 @@ public actor MicRecorder: AudioSource {
     private func stableSelectedInput(
         uid: String
     ) async throws -> CoreAudioInputDevice {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(5))
-        var stability = PreferredInputStabilityState()
-        while clock.now < deadline {
-            let devices = (try? CoreAudioInputDevice.availableDevices()) ?? []
-            let matching = devices.first(where: { $0.uid == uid })
-            let now = clock.now
-            stability.observe(matching, at: now)
-            if let stable = stability.stableDevice(
-                at: now,
-                for: .seconds(1)
-            ) {
-                return stable
-            }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        throw AudioRecordingError.audioSourceUnavailable(
-            "the microphone selected before audio setup is not stable"
+        let outcome = await MicrophoneStability.awaitStableInput(
+            uid: uid,
+            window: stabilityPolicy.window,
+            deadline: stabilityPolicy.deadline,
+            pollInterval: stabilityPolicy.pollInterval,
+            listDevices: listDevices,
+            timeline: stabilityTimeline
         )
+        switch outcome {
+        case let .stable(device, waited):
+            diagnostics.record(RecordingDiagnosticEvent(
+                name: "microphone-settled",
+                details: [
+                    "uid": uid,
+                    "deviceID": "\(device.id)",
+                    "waitedMilliseconds": "\(waited.wholeMilliseconds)",
+                ]
+            ))
+            return device
+
+        case let .unstable(trace, observedDevices):
+            // The notice on screen is gone as soon as it is read, so the one
+            // thing that explains a failed start - what Core Audio actually
+            // reported while waiting - is written down here.
+            diagnostics.record(RecordingDiagnosticEvent(
+                name: "microphone-not-stable",
+                details: [
+                    "uid": uid,
+                    "waitedMilliseconds":
+                        "\(stabilityPolicy.deadline.wholeMilliseconds)",
+                    "trace": trace.summary,
+                    "devicesSeen": observedDevices.joined(separator: "; "),
+                ]
+            ))
+            // Written through immediately: this entry only matters when the
+            // recording it belongs to is already failing.
+            diagnostics.flush()
+            Self.logger.error(
+                """
+                Microphone \(uid, privacy: .public) never settled within \
+                \(self.stabilityPolicy.deadline.wholeMilliseconds, privacy: .public) ms: \
+                \(trace.summary, privacy: .public)
+                """
+            )
+            throw AudioRecordingError.audioSourceUnavailable(
+                "the microphone selected before audio setup is not stable"
+            )
+        }
     }
 
     public func start(
@@ -512,10 +594,10 @@ public actor MicRecorder: AudioSource {
     private func makeCapture(
         announcesRecovery: Bool
     ) -> MicEngineCapture {
-        let engine = initialEngine ?? AVAudioEngine()
-        initialEngine = nil
+        // Created here, never ahead of time: the unit must be built after the
+        // system-audio tap has rebuilt Core Audio's device graph.
         return MicEngineCapture(
-            engine: engine,
+            unit: HALInputUnit(),
             announcesRecovery: announcesRecovery
         )
     }
@@ -576,14 +658,12 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
     @unchecked Sendable {
     let retirementID = UUID()
 
-    private let engine: AVAudioEngine
+    private let unit: HALInputUnit
     private let gate: InputCaptureGate
     private let queue: DispatchQueue
-    private var tapInstalled = false
-    private var configurationObserver: NSObjectProtocol?
 
-    init(engine: AVAudioEngine, announcesRecovery: Bool) {
-        self.engine = engine
+    init(unit: HALInputUnit, announcesRecovery: Bool) {
+        self.unit = unit
         gate = InputCaptureGate(announcesRecovery: announcesRecovery)
         queue = DispatchQueue(
             label: "org.steno.microphone-engine.\(retirementID.uuidString)",
@@ -592,35 +672,8 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
     }
 
     func prepare(deviceID: AudioDeviceID) async throws -> AVAudioFormat {
-        try await perform { engine in
-            let inputNode = engine.inputNode
-            guard let audioUnit = inputNode.audioUnit else {
-                throw AudioRecordingError.audioSourceUnavailable(
-                    "the microphone audio unit is unavailable"
-                )
-            }
-            var mutableDeviceID = deviceID
-            let status = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &mutableDeviceID,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
-            guard status == noErr else {
-                throw AudioRecordingError.audioSourceUnavailable(
-                    "cannot select the recording microphone"
-                )
-            }
-            let nativeFormat = inputNode.outputFormat(forBus: 0)
-            guard nativeFormat.sampleRate > 0,
-                  nativeFormat.channelCount > 0 else {
-                throw AudioRecordingError.audioSourceUnavailable(
-                    "no usable microphone input format"
-                )
-            }
-            return nativeFormat
+        try await perform("prepare") { unit in
+            try unit.prepare(deviceID: deviceID)
         }
     }
 
@@ -642,17 +695,14 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
                 "the microphone handlers are unavailable"
             )
         }
-        try await perform { [self] engine in
+        try await perform("start") { [self] unit in
             let gate = gate
             let converter = try AudioBufferConverter(
                 sourceFormat: nativeFormat,
                 targetFormat: fixedFormat
             )
-            engine.inputNode.installTap(
-                onBus: 0,
-                bufferSize: 4_096,
-                format: nil
-            ) { [retirementID] buffer, _ in
+            let retirementID = retirementID
+            try unit.start { buffer in
                 guard let converted = converter.convert(buffer) else { return }
                 let decision = gate.consume(
                     frameLength: converted.frameLength
@@ -664,21 +714,16 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
                 bufferHandler(converted)
                 bufferReceived(retirementID)
             }
-            tapInstalled = true
-            engine.prepare()
-            try engine.start()
-            configurationObserver = NotificationCenter.default.addObserver(
-                forName: .AVAudioEngineConfigurationChange,
-                object: engine,
-                queue: nil
-            ) { [retirementID] _ in
+            // The HAL unit has no configuration-change notification of its own,
+            // so the bound device is observed directly. Same contract as before.
+            unit.observeFormatChanges { [retirementID] in
                 let change = gate.configurationChanged()
                 guard change != .ignore else { return }
                 configurationChanged(retirementID, change)
             }
             let configurationEpoch = gate.configurationEpoch
             guard Self.routeIsValid(
-                engine: engine,
+                unit: unit,
                 expectedDeviceID: expectedDeviceID,
                 expectedDeviceUID: expectedDeviceUID
             ) else {
@@ -721,9 +766,9 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
         expectedDeviceUID: String?
     ) async -> Bool {
         guard let expectedDeviceID, let expectedDeviceUID else { return false }
-        return await performWithoutThrowing(timeoutFallback: false) { engine in
+        return await performWithoutThrowing(timeoutFallback: false) { unit in
             Self.routeIsValid(
-                engine: engine,
+                unit: unit,
                 expectedDeviceID: expectedDeviceID,
                 expectedDeviceUID: expectedDeviceUID
             )
@@ -738,9 +783,9 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
         return await performWithoutThrowing(
             timeout: .seconds(1),
             timeoutFallback: false
-        ) { engine in
-            engine.isRunning && Self.routeIsValid(
-                engine: engine,
+        ) { unit in
+            unit.isCapturing && Self.routeIsValid(
+                unit: unit,
                 expectedDeviceID: expectedDeviceID,
                 expectedDeviceUID: expectedDeviceUID
             )
@@ -751,54 +796,63 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
         completion: @escaping @Sendable () -> Void
     ) {
         retireGate()
-        queue.async { [self] in
-            if let configurationObserver {
-                NotificationCenter.default.removeObserver(configurationObserver)
-                self.configurationObserver = nil
-            }
-            if tapInstalled {
-                engine.inputNode.removeTap(onBus: 0)
-                tapInstalled = false
-                engine.stop()
-            }
+        queue.async { [unit] in
+            // Stopping the unit removes its format listener and disposes it.
+            unit.stop()
             completion()
         }
     }
 
+    /// Runs one bring-up step on the capture queue, with a watchdog.
+    ///
+    /// The watchdog stays generous on purpose. A call that overruns it is not
+    /// cancellable - it keeps running on this queue and holds Core Audio's
+    /// client lock - so a timeout here does not merely fail one attempt, it
+    /// poisons every later one. Naming the phase is what makes that visible in
+    /// the diagnostics instead of guessable.
     private func perform<Value: Sendable>(
-        _ operation: @escaping @Sendable (AVAudioEngine) throws -> Value
+        _ phase: String,
+        _ operation: @escaping @Sendable (HALInputUnit) throws -> Value
     ) async throws -> Value {
         let result = MicCaptureResultLatch<Value>()
-        queue.async { [engine] in
+        let started = ContinuousClock.now
+        queue.async { [unit] in
             do {
-                result.resolve(.success(try operation(engine)))
+                result.resolve(.success(try operation(unit)))
             } catch {
                 result.resolve(.failure(error))
             }
         }
         Task {
             do {
-                try await Task.sleep(for: .seconds(5))
+                try await Task.sleep(for: Self.watchdogTimeout)
                 result.resolve(.failure(
                     AudioRecordingError.audioSourceUnavailable(
-                        "microphone hardware did not respond within five seconds"
+                        "the microphone did not respond while it was asked to \(phase)"
                     )
                 ))
             } catch {
                 return
             }
         }
-        return try await result.value()
+        let value = try await result.value()
+        lastPhaseDuration = started.duration(to: .now)
+        return value
     }
+
+    /// How long the last completed bring-up step took, for the diagnostics log.
+    private(set) var lastPhaseDuration: Duration = .zero
+
+    static let watchdogTimeout: Duration = .seconds(15)
 
     private func performWithoutThrowing<Value: Sendable>(
         timeout: Duration = .seconds(5),
         timeoutFallback: Value,
-        _ operation: @escaping @Sendable (AVAudioEngine) -> Value
+        _ operation: @escaping @Sendable (HALInputUnit) -> Value
     ) async -> Value {
         let result = MicCaptureResultLatch<Value>()
-        queue.async { [engine] in
-            result.resolve(.success(operation(engine)))
+        queue.async { [unit] in
+            result.resolve(.success(operation(unit)))
         }
         return await result.value(
             timeout: timeout,
@@ -807,11 +861,11 @@ private final class MicEngineCapture: MicCaptureRetirementResource,
     }
 
     private static func routeIsValid(
-        engine: AVAudioEngine,
+        unit: HALInputUnit,
         expectedDeviceID: AudioDeviceID,
         expectedDeviceUID: String
     ) -> Bool {
-        guard let reportedDeviceID = currentDeviceID(for: engine) else {
+        guard let reportedDeviceID = unit.currentDeviceID() else {
             return false
         }
         let route = PinnedEngineInputRoute(

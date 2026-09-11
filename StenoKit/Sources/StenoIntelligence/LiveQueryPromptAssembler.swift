@@ -487,7 +487,8 @@ public struct ExternalChatCompletionsLiveQueryStreamer: LiveQueryAnswering {
                 ),
                 secret: try resolvedSecret(),
                 extracting: Self.anthropicMessagesContent,
-                extraHeaders: ["anthropic-version": "2023-06-01"]
+                extraHeaders: ["anthropic-version": "2023-06-01"],
+                secretHeader: "x-api-key"
             )
         case .amazonBedrock:
             throw LiveQueryTransportError.unsupportedDialect(endpoint.dialect)
@@ -513,14 +514,15 @@ public struct ExternalChatCompletionsLiveQueryStreamer: LiveQueryAnswering {
         body: [String: Any],
         secret: String?,
         extracting: @Sendable (Data) throws -> String,
-        extraHeaders: [String: String] = [:]
+        extraHeaders: [String: String] = [:],
+        secretHeader: String = "Authorization"
     ) async throws -> String {
         var request = URLRequest(url: url, timeoutInterval: LiveQueryLimits.timeoutSeconds)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let secret {
-            request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+            request.setValue(secretHeader == "Authorization" ? "Bearer \(secret)" : secret, forHTTPHeaderField: secretHeader)
         }
         for (field, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: field)

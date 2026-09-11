@@ -1,25 +1,37 @@
 import StenoDomain
 import SwiftUI
 
-/// One pending undo affordance for a meeting that just moved to Trash.
-/// The Finder trash URL is the restore handle: moving it back is the whole
-/// undo, so it must be captured at delete time.
-struct UndoDeleteToastWindow: Equatable {
+/// One recoverable item captured while its meeting folder moves to Trash.
+struct UndoDeleteToastItem: Equatable {
     let meetingID: MeetingID
     let title: String
     let trashedURL: URL?
+}
+
+/// One pending undo affordance for the latest trash operation. A window may
+/// contain one meeting or a whole confirmed batch. Finder trash URLs are the
+/// restore handles, so every successful move is captured at delete time.
+struct UndoDeleteToastWindow: Equatable {
+    let id = UUID()
+    let items: [UndoDeleteToastItem]
     let expiresAt: Date
+
+    var title: String {
+        items.count == 1
+            ? items[0].title
+            : String(localized: "\(items.count) meetings")
+    }
 
     func isActive(now: Date) -> Bool {
         now < expiresAt
     }
 }
 
-/// Pure timing policy of the undo toast. A new delete replaces any pending
-/// window (single toast at a time) and implicitly restarts its timer by
-/// carrying a fresh `expiresAt`.
+/// Pure timing policy of the undo toast. A new operation replaces any pending
+/// window and restarts its timer. Every item in one confirmed batch remains
+/// part of the same undo operation.
 enum UndoDeleteToastPolicy {
-    static let window: TimeInterval = 8
+    static let window: TimeInterval = 12
 
     static func begin(
         previous: UndoDeleteToastWindow?,
@@ -29,9 +41,23 @@ enum UndoDeleteToastPolicy {
         now: Date
     ) -> UndoDeleteToastWindow {
         UndoDeleteToastWindow(
-            meetingID: meetingID,
-            title: title,
-            trashedURL: trashedURL,
+            items: [UndoDeleteToastItem(
+                meetingID: meetingID,
+                title: title,
+                trashedURL: trashedURL
+            )],
+            expiresAt: now.addingTimeInterval(window)
+        )
+    }
+
+    static func begin(
+        previous: UndoDeleteToastWindow?,
+        items: [UndoDeleteToastItem],
+        now: Date
+    ) -> UndoDeleteToastWindow? {
+        guard !items.isEmpty else { return nil }
+        return UndoDeleteToastWindow(
+            items: items,
             expiresAt: now.addingTimeInterval(window)
         )
     }
@@ -80,6 +106,10 @@ struct UndoDeleteToast: View {
                 .shadow(radius: 8)
         )
         .task(id: window.expiresAt) {
+            AccessibilityNotification.Announcement(
+                String(localized: "Moved to Trash. Undo is available in the Edit menu.")
+            ).post()
+
             let remaining = window.expiresAt.timeIntervalSinceNow
             guard remaining > 0 else {
                 onExpire()

@@ -38,7 +38,7 @@ struct MacMeetingCommandAvailability: Equatable {
             && singleMeeting.map { meetingsWithAudio.contains($0.id) } == true
         canExportAudio = canRetranscribe
         canMoveToTrash = hasRuntime
-            && singleMeeting != nil
+            && hasCompleteSelection
             && !isRecording
             && !selectedMeetingIsRecording
     }

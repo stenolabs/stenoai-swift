@@ -491,7 +491,7 @@ struct LibraryChatWindow: View {
     @State private var draft = ""
     /// One confirmation per app session before the first external send,
     /// mirroring the live Ask bar.
-    @State private var externalSendAcknowledged = false
+    @State private var externalConsent = ExternalSendConsent()
     @State private var pendingExternalNotice: LocalizedExternalModelNotice?
     @State private var renamingSession: LibraryChatSession?
     @State private var renameDraft = ""
@@ -737,15 +737,20 @@ struct LibraryChatWindow: View {
         let scope = chat.healedScope(appModel: model)
         // Outbound disclosure before the first external send per session,
         // mirroring the live Ask bar. Apple Foundation Models stays silent.
-        if textModelSettings.selectedEndpoint != nil, !externalSendAcknowledged {
+        let endpoint = textModelSettings.selectedEndpoint
+        if !externalConsent.permits(endpoint) {
             Task {
                 let sources = await chat.collectSources(appModel: model, scope: scope)
+                guard textModelSettings.selectedEndpoint == endpoint else { submit(); return }
+                externalConsent.prepare(endpoint)
                 pendingExternalNotice = makeExternalNotice(sources: sources)
             }
             return
         }
         Task {
             let sources = await chat.collectSources(appModel: model, scope: scope)
+            guard textModelSettings.selectedEndpoint == endpoint,
+                  externalConsent.permits(endpoint) else { submit(); return }
             chat.send(draft: trimmed, sources: sources)
             draft = ""
         }
@@ -820,16 +825,10 @@ struct LibraryChatWindow: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Send once, then keep asking") {
-                    externalSendAcknowledged = true
+                    let accepted = externalConsent.accept(current: textModelSettings.selectedEndpoint)
                     pendingExternalNotice = nil
-                    Task {
-                        // Same healing rule as the normal send path so a
-                        // deleted folder/meeting can never filter a turn.
-                        let scope = chat.healedScope(appModel: model)
-                        let sources = await chat.collectSources(appModel: model, scope: scope)
-                        chat.send(draft: draft, sources: sources)
-                        draft = ""
-                    }
+                    guard accepted else { submit(); return }
+                    submit()
                 }
                 .keyboardShortcut(.defaultAction)
             }

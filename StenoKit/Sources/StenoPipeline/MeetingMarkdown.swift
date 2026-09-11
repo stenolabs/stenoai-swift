@@ -51,6 +51,25 @@ public enum MeetingMarkdown {
         return lines.joined(separator: "\n")
     }
 
+
+    /// States that this recording is missing a track.
+    ///
+    /// Placed in the document itself, not only in the app: an exported or
+    /// copied set of minutes travels without the interface around it, and
+    /// minutes that quietly leave out one side of a conversation read exactly
+    /// like complete ones.
+    public static func incompleteRecordingNote(
+        _ unrecordedTracks: [MediaAsset.Kind]
+    ) -> String? {
+        guard !unrecordedTracks.isEmpty else { return nil }
+        let missing = unrecordedTracks
+            .sorted { $0.rawValue < $1.rawValue }
+            .map { $0 == .micTrack ? "the microphone" : "the system audio" }
+            .joined(separator: " and ")
+        return "> **Incomplete recording:** \(missing) was not recorded, "
+            + "so anything said on that side is not part of this document."
+    }
+
     public static func render(
         _ input: Input,
         calendar: Calendar = .current
@@ -59,6 +78,10 @@ public enum MeetingMarkdown {
         lines.append(header(title: input.meeting.title, authorLine: input.authorLine))
         lines.append("")
         lines.append(dateLine(input.meeting.createdAt, calendar: calendar))
+        if let note = incompleteRecordingNote(input.meeting.unrecordedTracks) {
+            lines.append("")
+            lines.append(note)
+        }
         if !input.participants.isEmpty {
             lines.append("")
             lines.append("**Participants:** \(input.participants.joined(separator: ", "))")

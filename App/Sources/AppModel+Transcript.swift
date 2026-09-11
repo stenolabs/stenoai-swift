@@ -10,6 +10,45 @@ import StenoPipeline
 /// und ein spaeterer Neulauf wirft die Korrektur nicht weg, sondern wartet.
 @MainActor
 extension AppModel {
+    func shortRecordingDecision(for meetingID: MeetingID) async -> ShortRecordingDecision? {
+        guard let runtime else { return nil }
+        do {
+            let result = try await ShortRecordingDecisionStore(layout: runtime.library.layout).pending(meetingID, jobStore: runtime.jobStore)
+            shortRecordingReadFailures.remove(meetingID)
+            return result
+        }
+        catch {
+            if shortRecordingReadFailures.insert(meetingID).inserted {
+                report("The saved recording decision could not be read.")
+            }
+            return nil
+        }
+    }
+
+    func transcribeShortRecording(_ decision: ShortRecordingDecision) async -> Bool {
+        guard let runtime, !isRecording, !isStartingRecording, !isMovingMeetingsToTrash else { return false }
+        let store = ShortRecordingDecisionStore(layout: runtime.library.layout)
+        do {
+            guard try await store.pending(decision.job.meetingID, jobStore: runtime.jobStore)?.job.id == decision.job.id else { return false }
+            let meeting = try await runtime.library.loadMeeting(decision.job.meetingID)
+            guard meeting.processingGenerationID == decision.job.processingGenerationID else {
+                try store.remove(meeting.id, expectedJobID: decision.job.id)
+                report("The recording decision changed. Please reopen the meeting.")
+                return false
+            }
+            guard meeting.status != .recording,
+                  try store.load(meeting.id)?.job.id == decision.job.id,
+                  !isRecording, !isStartingRecording, !isMovingMeetingsToTrash else { return false }
+            _ = try await runtime.jobStore.ensureEnqueued(decision.job)
+            try store.remove(meeting.id, expectedJobID: decision.job.id)
+            noteJobEnqueued(for: meeting.id)
+            return true
+        } catch {
+            report(verbatim: Self.message("Transcription could not be scheduled.", error))
+            return false
+        }
+    }
+
     /// Speichert den korrigierten Text eines Turns.
     ///
     /// `revision` ist der Stand, den der Benutzer vor sich hatte. Passt er
@@ -54,7 +93,7 @@ extension AppModel {
             report("This transcript changed while you were editing. Reopen the meeting and try again.")
             return nil
         } catch {
-            report(AppModel.message("The correction could not be saved.", error))
+            report(verbatim: AppModel.message("The correction could not be saved.", error))
             return nil
         }
     }
@@ -68,17 +107,19 @@ extension AppModel {
     /// Nimmt den geparkten Neulauf als aktuellen Stand. Die eigene Korrektur
     /// bleibt als Revision erhalten, sie ist nur nicht mehr die angezeigte.
     @discardableResult
-    func adoptPendingTranscript(for meetingID: MeetingID) async -> Bool {
+    func adoptPendingTranscript(for meetingID: MeetingID, expectedCurrentRevisionID: RevisionID, expectedCandidateID: RevisionID) async -> Bool {
         guard let runtime else { return false }
         do {
             guard try await runtime.library.adoptPendingRevision(
-                meetingID: meetingID
+                meetingID: meetingID,
+                expectedCurrentRevisionID: expectedCurrentRevisionID,
+                expectedCandidateID: expectedCandidateID
             ) != nil else { return false }
             await demoDataMeetingContentDidChange(meetingID)
             report("Switched to the new transcription.", isError: false)
             return true
         } catch {
-            report(AppModel.message("The new transcription could not be taken over.", error))
+            report(verbatim: AppModel.message("The new transcription could not be taken over.", error))
             return false
         }
     }

@@ -389,7 +389,7 @@ extension GeneralSettingsView {
                 do {
                     try LoginItem.setEnabled(enabled)
                 } catch {
-                    model.report(error.localizedDescription)
+                    model.report(verbatim: error.localizedDescription)
                 }
             }
         )

@@ -41,7 +41,7 @@ enum MeetingSidebarActionPolicy {
         case 1:
             [.rename, .moveMeetings, .retranscribe, .export, .trash]
         default:
-            [.moveMeetings]
+            [.moveMeetings, .trash]
         }
     }
 
@@ -55,6 +55,62 @@ enum MeetingSidebarActionPolicy {
         if availability.canExportMarkdown { actions.append(.export) }
         if availability.canMoveToTrash { actions.append(.trash) }
         return actions
+    }
+}
+
+struct MeetingTrashRequest: Equatable {
+    struct Item: Equatable {
+        let meetingID: MeetingID
+        let title: String
+    }
+
+    let items: [Item]
+
+    init?(meetings: [Meeting]) {
+        guard !meetings.isEmpty else { return nil }
+        items = meetings.map {
+            Item(meetingID: $0.id, title: $0.title)
+        }
+    }
+
+    var meetingIDs: [MeetingID] {
+        items.map(\.meetingID)
+    }
+
+    var confirmationTitle: LocalizedStringResource {
+        if items.count == 1, let item = items.first {
+            return "Move \u{201C}\(item.title)\u{201D} to the Trash?"
+        }
+        return "Move \(items.count) Meetings to the Trash?"
+    }
+
+    var actionTitle: LocalizedStringResource {
+        items.count == 1
+            ? "Move to Trash"
+            : "Move \(items.count) Meetings to Trash"
+    }
+
+    var menuTitle: LocalizedStringResource {
+        Self.menuTitle(meetingCount: items.count)
+    }
+
+    var message: LocalizedStringResource {
+        if items.count == 1 {
+            return "The entire meeting folder (audio, transcripts, runs) moves to the Trash and stays recoverable there. Speakers that are still unnamed cannot be named after deletion, because naming needs the audio file."
+        }
+        return "All selected meeting folders (audio, transcripts, runs) move to the Trash and stay recoverable there. Speakers that are still unnamed cannot be named after deletion, because naming needs the audio files."
+    }
+
+    static func menuTitle(meetingCount: Int) -> LocalizedStringResource {
+        meetingCount == 1
+            ? "Move to Trash…"
+            : "Move \(meetingCount) Meetings to Trash…"
+    }
+
+    static func commandTitle(meetingCount: Int) -> LocalizedStringResource {
+        meetingCount == 1
+            ? "Move Meeting to Trash…"
+            : "Move \(meetingCount) Meetings to Trash…"
     }
 }
 

@@ -94,6 +94,9 @@ struct LibraryCRUDTests {
                 created.id,
                 participantIDs: [PersonID()]
             )
+            // Occupied on purpose, see the comment below: an empty field would
+            // compare equal to an empty field and prove nothing.
+            try await library.updateUnrecordedTracks(created.id, to: [.micTrack])
             let before = try await library.loadMeeting(created.id)
 
             let after = try await library.renameMeeting(created.id, to: "Nachher")
@@ -113,7 +116,7 @@ struct LibraryCRUDTests {
             // ist: ein nil-Feld fehlt in beiden Staenden und wuerde stillschweigend
             // durchgehen. Diese Zahl faellt, sobald ein neues Feld dazukommt, das
             // der Aufbau nicht setzt.
-            #expect(Set(beforeKeys).count == 11)
+            #expect(Set(beforeKeys).count == 12)
             #expect(Set(beforeKeys) == Set(afterKeys))
             #expect(after.title == "Nachher")
             for key in beforeKeys where key != "title" {

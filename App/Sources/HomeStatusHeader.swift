@@ -132,7 +132,7 @@ struct HomeStatusHeader: View {
             navigationButton(
                 title: "Home",
                 systemImage: "house",
-                isSelected: model.selectedMeetingIDs.isEmpty
+                isSelected: model.selectedMeetingIDs.isEmpty && !model.isRecording
             ) {
                 model.selectedMeetingID = nil
             }
@@ -235,7 +235,7 @@ struct HomeStatusHeader: View {
     }
 
     private func headerButton(
-        title: String,
+        title: LocalizedStringResource,
         icon: String,
         tint: Color,
         action: @escaping () -> Void
@@ -246,7 +246,8 @@ struct HomeStatusHeader: View {
                     .foregroundStyle(tint)
                 Text(title)
                     .font(.callout.weight(.medium))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                 Spacer()
             }
             .contentShape(Rectangle())
@@ -254,7 +255,7 @@ struct HomeStatusHeader: View {
         .buttonStyle(.plain)
         .padding(.horizontal, Steno.Space.m)
         .padding(.vertical, Steno.Space.s)
-        .help(title)
+        .help(Text(title))
     }
 
     /// Cheap facts only: one job listing plus one small review.json read

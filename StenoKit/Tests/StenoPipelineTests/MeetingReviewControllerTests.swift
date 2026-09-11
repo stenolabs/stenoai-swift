@@ -7,6 +7,71 @@ import Testing
 
 @Suite("Meeting review controller")
 struct MeetingReviewControllerTests {
+    @Test("transfer preview preserves confirmed names from the corrected displayed run")
+    func transferUsesDisplayedRun() async throws {
+        try await withTemporaryDirectory { root in
+            let library = try Library.open(at: root)
+            let fixture = try await makeReviewFixture(library: library, isDemo: false)
+            let turn = TranscriptTurn(speaker: .cluster(runID: fixture.runID, clusterID: fixture.cluster.clusterID), start: 0, end: 1, segments: [TranscriptSegment(text: "Synthetic text", start: 0, end: 1, words: [])])
+            let base = TranscriptRevision(meetingID: fixture.meeting.id, origin: .finalRun(fixture.runID), turns: [turn])
+            _ = try await library.appendRevision(base)
+            let corrected = TranscriptRevision(meetingID: fixture.meeting.id, origin: .userEdit(base.id), turns: [turn])
+            _ = try await library.appendRevision(corrected)
+            let newerRun = RunID()
+            let newerCluster = reviewCluster(meetingID: fixture.meeting.id, runID: newerRun)
+            try seedIdentitySuggestionRun(meetingID: fixture.meeting.id, runID: newerRun, cluster: newerCluster, library: library)
+            try MeetingReviewStore(layout: library.layout).save(MeetingReviewDocument(runID: newerRun, clusters: [newerCluster]), meetingID: fixture.meeting.id)
+            _ = try await library.appendRevision(TranscriptRevision(meetingID: fixture.meeting.id, origin: .finalRun(newerRun), turns: []))
+            #expect(try await library.loadCurrentRevision(meetingID: fixture.meeting.id).id == corrected.id)
+            let preview = try await MeetingTransferExportService(library: library).preview(meetingID: fixture.meeting.id)
+            #expect(preview.visibleSpeakerLabels.contains("Ada"))
+        }
+    }
+
+    @Test("returning to an archived run prefers its newly saved current review")
+    func archiveRoundTrip() async throws {
+        try await withTemporaryDirectory { root in
+            let library = try Library.open(at: root)
+            let meeting = try await library.createMeeting(title: "Synthetic archive", status: .ready)
+            let store = MeetingReviewStore(layout: library.layout)
+            let a = RunID(), b = RunID()
+            var cluster = reviewCluster(meetingID: meeting.id, runID: a)
+            let original = MeetingReviewDocument(runID: a, clusters: [cluster])
+            let other = MeetingReviewDocument(runID: b, clusters: [])
+            try store.save(original, meetingID: meeting.id)
+            try store.save(other, meetingID: meeting.id)
+            cluster.reviewState = .generic
+            let updated = MeetingReviewDocument(runID: a, clusters: [cluster])
+            try store.save(updated, meetingID: meeting.id)
+            #expect(try store.load(meetingID: meeting.id, runID: a) == updated)
+            try store.save(other, meetingID: meeting.id)
+            #expect(try store.load(meetingID: meeting.id, runID: a) == updated)
+            #expect(try store.load(meetingID: meeting.id, runID: b) == other)
+        }
+    }
+
+    @Test("a displayed corrected revision keeps its archived review after a newer run")
+    func displayedRevisionRetainsReview() async throws {
+        try await withTemporaryDirectory { root in
+            let library = try Library.open(at: root)
+            let meeting = try await library.createMeeting(title: "Synthetic revision history", status: .ready)
+            let first = RunID(), second = RunID()
+            var firstCluster = reviewCluster(meetingID: meeting.id, runID: first)
+            firstCluster.reviewState = .generic
+            let secondCluster = reviewCluster(meetingID: meeting.id, runID: second)
+            try seedIdentitySuggestionRun(meetingID: meeting.id, runID: first, cluster: firstCluster, library: library)
+            try seedIdentitySuggestionRun(meetingID: meeting.id, runID: second, cluster: secondCluster, library: library)
+            let store = MeetingReviewStore(layout: library.layout)
+            try store.save(MeetingReviewDocument(runID: first, clusters: [firstCluster]), meetingID: meeting.id)
+            try store.save(MeetingReviewDocument(runID: second, clusters: [secondCluster]), meetingID: meeting.id)
+            let revision = TranscriptRevision(meetingID: meeting.id, origin: .userEdit(RevisionID()), turns: [TranscriptTurn(speaker: .cluster(runID: first, clusterID: firstCluster.clusterID), start: 0, end: 1, segments: [])])
+            let review = try #require(try await MeetingReviewAssembler.load(library: library, revision: revision))
+            #expect(review.runID == first)
+            #expect(review.clusters.first?.reviewState == .generic)
+            #expect(try store.load(meetingID: meeting.id)?.runID == second)
+        }
+    }
+
     @Test("demo meetings reject every voice-evidence action without store changes")
     func demoMeetingVoiceEvidenceActionsFailClosed() async throws {
         try await withTemporaryDirectory { root in
@@ -239,6 +304,11 @@ struct MeetingReviewControllerTests {
             #expect(persisted.runID == currentRunID)
             #expect(persisted.clusters[0].reviewState == .generic)
             #expect(currentReview != previousReview)
+            let archivePath = relativePath(of: library.layout.meetingDirectory(meeting.id).appendingPathComponent("review-history/\(previousRunID).json"), below: root)
+            let archivedValue = afterNonReview.removeValue(forKey: archivePath)
+            let archived = try #require(archivedValue)
+            #expect(archived.data == previousReview.data)
+            #expect(try MeetingReviewStore(layout: library.layout).load(meetingID: meeting.id, runID: previousRunID)?.clusters == [previousCluster])
             #expect(afterNonReview == beforeNonReview)
         }
     }

@@ -58,12 +58,13 @@ private struct DemoDataObservingNotesPersistence: MeetingNotesPersistence {
 extension AppModel {
     // MARK: - Sprecher-Review
 
-    func loadReviewData(meetingID: MeetingID) async -> MeetingReviewData? {
+    func loadReviewData(meetingID: MeetingID, revision: TranscriptRevision? = nil) async -> MeetingReviewData? {
         guard let runtime else { return nil }
-        return try? await MeetingReviewAssembler.load(
-            library: runtime.library,
-            meetingID: meetingID
-        )
+        let displayed: TranscriptRevision?
+        if let revision { displayed = revision }
+        else { displayed = await transcript(for: meetingID) }
+        guard let displayed, displayed.meetingID == meetingID else { return nil }
+        return try? await MeetingReviewAssembler.load(library: runtime.library, revision: displayed)
     }
 
     // MARK: - Teilnehmer
@@ -90,7 +91,7 @@ extension AppModel {
             report("That is not a valid e-mail address.")
             return false
         } catch {
-            report(AppModel.message("The e-mail address could not be saved.", error))
+            report(verbatim: AppModel.message("The e-mail address could not be saved.", error))
             return false
         }
     }
@@ -104,7 +105,7 @@ extension AppModel {
                 .setPersonOrganization(personID, to: organization)
             return true
         } catch {
-            report(AppModel.message("The organization could not be saved.", error))
+            report(verbatim: AppModel.message("The organization could not be saved.", error))
             return false
         }
     }
@@ -173,7 +174,7 @@ extension AppModel {
             selectedMeetingID = meeting.id
             return meeting.id
         } catch {
-            report(AppModel.message("The draft could not be created.", error))
+            report(verbatim: AppModel.message("The draft could not be created.", error))
             return nil
         }
     }
@@ -252,7 +253,9 @@ extension AppModel {
             return updated
         } catch MeetingReviewController.ReviewActionError.stale {
             reviewError = String(localized: "The review state changed. The view has been reloaded; please try again.")
-            return await loadReviewData(meetingID: meetingID)
+            return try? await MeetingReviewAssembler.load(
+                library: runtime.library, meetingID: meetingID, diarizationRunID: data.runID
+            )
         } catch MeetingReviewController.ReviewActionError
             .demoMeetingCannotCreateVoiceEvidence {
             reviewError = Self.demoVoiceEvidenceRestrictionMessage
@@ -493,6 +496,7 @@ extension AppModel {
                 blockingStatuses: [.queued, .running]
             )
             if enqueued { noteJobEnqueued(for: meetingID) }
+            else { reviewError = String(localized: "No new speaker-recognition run was scheduled. Check the pending transcription or existing processing results.") }
             return enqueued
         } catch {
             reviewError = AppModel.message("Speaker recognition could not be started.", error)
@@ -537,7 +541,7 @@ extension AppModel {
             report("Transcribing again. The previous transcript stays available.", isError: false)
             return true
         } catch {
-            report(AppModel.message("Transcription could not be started.", error))
+            report(verbatim: AppModel.message("Transcription could not be started.", error))
             return false
         }
     }
@@ -645,34 +649,120 @@ extension AppModel {
                 isError: false
             )
         } catch {
-            report(AppModel.message("The run could not be cancelled.", error))
+            report(verbatim: AppModel.message("The run could not be cancelled.", error))
         }
     }
 
     // MARK: - Meeting verwalten
 
     func deleteMeeting(_ meetingID: MeetingID) async {
-        guard let runtime else { return }
-        do {
-            let jobs = (try? await runtime.jobStore.list())?
-                .filter { $0.meetingID == meetingID } ?? []
-            for job in jobs where job.status == .queued || job.status == .running {
-                try? await runtime.coordinator.cancel(jobID: job.id)
+        await deleteMeetings([meetingID])
+    }
+
+    /// Re-read after cancellation: a parent may have completed and queued its
+    /// successor between the first snapshot and the cancellation request.
+    static func cancelJobsBeforeTrash(
+        meetingID: MeetingID,
+        list: () async throws -> [Job],
+        cancel: (JobID) async throws -> Void
+    ) async throws {
+        var previousPending: Set<JobID> = []
+        while true {
+            let pending = try await list().filter {
+                $0.meetingID == meetingID && ($0.status == .queued || $0.status == .running)
             }
-            try await runtime.jobStore.removeJobs(meetingID: meetingID)
-            let trashedTitle = meetings.first(where: { $0.id == meetingID })?.title
-            let trashedURL = try await runtime.library.trashMeeting(meetingID)
-            beginTrashUndoWindow(
-                meetingID: meetingID,
-                title: trashedTitle ?? meetingID.description,
-                trashedURL: trashedURL
-            )
-            if selectedMeetingID == meetingID { selectedMeetingID = nil }
+            guard !pending.isEmpty else { return }
+            let identifiers = Set(pending.map(\.id))
+            guard identifiers != previousPending else {
+                throw PipelineError.cancellationTooLate(pending[0].id)
+            }
+            previousPending = identifiers
+            for job in pending { try await cancel(job.id) }
+        }
+    }
+
+    func deleteMeetings(_ meetingIDs: [MeetingID]) async {
+        guard let runtime else { return }
+        var seen: Set<MeetingID> = []
+        let targets = meetingIDs.filter { seen.insert($0).inserted }
+        guard !targets.isEmpty else { return }
+
+        let selectedMeetings = meetings.filter { targets.contains($0.id) }
+        guard !isRecording,
+              !isStartingRecording,
+              !selectedMeetings.contains(where: { $0.status == .recording }) else {
+            report(targets.count == 1
+                ? "The meeting cannot be moved to the Trash while recording."
+                : "Meetings cannot be moved to the Trash while recording.")
+            return
+        }
+        guard beginMovingMeetingsToTrash() else { return }
+        defer { finishMovingMeetingsToTrash() }
+
+        let titles = Dictionary(uniqueKeysWithValues: meetings.map {
+            ($0.id, $0.title)
+        })
+        var trashedItems: [UndoDeleteToastItem] = []
+        var lastTrashError: Error?
+        var lastCleanupError: Error?
+
+        for meetingID in targets {
+            do {
+                try await Self.cancelJobsBeforeTrash(meetingID: meetingID, list: {
+                    try await runtime.jobStore.list()
+                }, cancel: { jobID in
+                    try await runtime.coordinator.cancel(jobID: jobID)
+                })
+                let trashedURL = try await meetingTrasher(
+                    runtime.library,
+                    meetingID
+                )
+                trashedItems.append(UndoDeleteToastItem(
+                    meetingID: meetingID,
+                    title: titles[meetingID] ?? meetingID.description,
+                    trashedURL: trashedURL
+                ))
+                do {
+                    try await runtime.jobStore.removeJobs(meetingID: meetingID)
+                } catch {
+                    lastCleanupError = error
+                }
+            } catch {
+                lastTrashError = error
+            }
+        }
+
+        if !trashedItems.isEmpty {
+            beginTrashUndoWindow(items: trashedItems)
+            selectedMeetingIDs.subtract(Set(trashedItems.map(\.meetingID)))
             await refreshMeetings()
-        } catch {
-            // Loeschen wird aus dem Kontextmenue der Seitenleiste
-            // ausgeloest; die Review-Sektion ist dann meist gar nicht sichtbar.
-            report(AppModel.message("The meeting could not be moved to the trash.", error))
+        }
+
+        let failedCount = targets.count - trashedItems.count
+        guard failedCount > 0 else {
+            if let lastCleanupError {
+                let summary = targets.count == 1
+                    ? "The meeting was moved to the Trash, but its processing records could not be cleaned up."
+                    : "The meetings were moved to the Trash, but some processing records could not be cleaned up."
+                report(verbatim: AppModel.message(String.LocalizationValue(stringLiteral: summary), lastCleanupError))
+            }
+            return
+        }
+        var summary: String
+        if targets.count == 1 {
+            summary = "The meeting could not be moved to the Trash."
+        } else if trashedItems.isEmpty {
+            summary = "The meetings could not be moved to the Trash."
+        } else {
+            summary = "\(trashedItems.count) of \(targets.count) meetings were moved to the Trash. \(failedCount) could not be moved."
+        }
+        if lastCleanupError != nil {
+            summary += " Some processing records for moved meetings could not be cleaned up."
+        }
+        if let error = lastTrashError ?? lastCleanupError {
+            report(verbatim: AppModel.message(String.LocalizationValue(stringLiteral: summary), error))
+        } else {
+            report(verbatim: summary)
         }
     }
 
@@ -684,7 +774,7 @@ extension AppModel {
         } catch LibraryError.invalidMeetingTitle {
             report("The title must not be empty.")
         } catch {
-            report(AppModel.message("Renaming failed.", error))
+            report(verbatim: AppModel.message("Renaming failed.", error))
         }
     }
 }

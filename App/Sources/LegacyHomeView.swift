@@ -20,6 +20,7 @@ enum LegacyHomePresentation {
 /// The useful no-selection destination: orient, start, and return to recent
 /// work without turning the meeting list into a dashboard.
 struct LegacyHomeView: View {
+    @State private var durations: [MeetingID: TimeInterval] = [:]
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var colorScheme
 
@@ -41,25 +42,61 @@ struct LegacyHomeView: View {
         }
         .background(Steno.Surfaces.paper(colorScheme))
         .navigationTitle("Home")
+        .task(id: recentMeetings) {
+            var loaded: [MeetingID: TimeInterval] = [:]
+            for meeting in recentMeetings {
+                guard !Task.isCancelled else { return }
+                if meeting.status != .recording,
+                   let duration = await model.duration(for: meeting.id),
+                   duration.isFinite, duration > 0 {
+                    loaded[meeting.id] = duration
+                }
+            }
+            guard !Task.isCancelled else { return }
+            durations = loaded
+        }
     }
 
     private var hero: some View {
-        HStack(alignment: .top, spacing: Steno.Space.xl) {
-            VStack(alignment: .leading, spacing: Steno.Space.s) {
-                greeting
-                    .font(Steno.Typography.homeTitle)
-                    .foregroundStyle(Steno.Surfaces.ink(colorScheme))
-                Text("Ready when you are.")
-                    .font(.title3)
-                    .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: Steno.Space.xl) {
+                introduction.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: Steno.Space.l)
+                preparation(alignment: .trailing)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: Steno.Space.l)
-            VStack(alignment: .trailing, spacing: Steno.Space.m) {
-                Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
-                    .font(.callout)
-                    .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+            VStack(alignment: .leading, spacing: Steno.Space.l) {
+                introduction
+                preparation(alignment: .leading)
+            }
+        }
+    }
+
+    private var introduction: some View {
+        VStack(alignment: .leading, spacing: Steno.Space.s) {
+            greeting
+                .font(Steno.Typography.homeTitle)
+                .foregroundStyle(Steno.Surfaces.ink(colorScheme))
+            Text("Ready when you are.")
+                .font(.title3)
+                .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func preparation(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: Steno.Space.m) {
+            Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
+                .font(.callout)
+                .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+            HStack {
+                Button("New note") {
+                    Task { await model.createDraftMeeting() }
+                }
+                .disabled(!StenoCommandState(model: model).canCreateMeeting)
                 newNoteButton
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
@@ -80,9 +117,9 @@ struct LegacyHomeView: View {
             Task { await model.startRecording() }
         } label: {
             HStack(spacing: 7) {
-                Image(systemName: "plus")
+                Image(systemName: "record.circle")
                     .font(.caption.weight(.semibold))
-                Text("New note")
+                Text("Start Recording")
                     .font(.callout.weight(.semibold))
             }
             .padding(.horizontal, 15)
@@ -103,8 +140,10 @@ struct LegacyHomeView: View {
     @ViewBuilder
     private var previous: some View {
         VStack(alignment: .leading, spacing: 0) {
-            sectionLabel("Previous")
-                .padding(.bottom, Steno.Space.s)
+            if !recentMeetings.isEmpty {
+                sectionLabel("Previous")
+                    .padding(.bottom, Steno.Space.s)
+            }
             if recentMeetings.isEmpty {
                 emptyPrevious
             } else {
@@ -117,22 +156,19 @@ struct LegacyHomeView: View {
 
     private var emptyPrevious: some View {
         HStack(alignment: .firstTextBaseline, spacing: 18) {
-            Text("NOW")
-                .font(.caption2.weight(.semibold))
-                .tracking(0.8)
-                .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
-                .frame(width: Steno.Layout.chronologyRailWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Your first note starts here")
                     .font(.headline)
-                Text("Record a conversation or create a meeting draft from the note options.")
+                Text("Record a conversation or choose New note to create a meeting draft.")
                     .font(.callout)
                     .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
             }
         }
         .padding(.vertical, Steno.Space.l)
         .overlay(alignment: .top) {
-            Divider().overlay(Steno.Surfaces.border(colorScheme))
+            Rectangle()
+                .fill(Steno.Surfaces.border(colorScheme))
+                .frame(height: 1)
         }
     }
 
@@ -141,7 +177,7 @@ struct LegacyHomeView: View {
             model.selectedMeetingID = meeting.id
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 18) {
-                Text(meeting.createdAt, format: .dateTime.hour().minute())
+                Text(meeting.createdAt, format: .dateTime.day().month(.twoDigits).year(.twoDigits))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
                     .frame(width: Steno.Layout.chronologyRailWidth, alignment: .leading)
@@ -149,9 +185,15 @@ struct LegacyHomeView: View {
                     Text(meeting.title)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
-                    Text(meeting.createdAt, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                        .font(.caption)
-                        .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+                    HStack(spacing: 6) {
+                        Text(meeting.createdAt, format: .dateTime.weekday(.abbreviated).hour().minute())
+                        if let duration = durations[meeting.id] {
+                            Text("·")
+                            Label(MeetingDetailView.durationText(duration), systemImage: "clock")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
                 }
                 Spacer(minLength: Steno.Space.m)
                 if meeting.status != .ready {
@@ -166,7 +208,9 @@ struct LegacyHomeView: View {
             .contentShape(Rectangle())
             .padding(.vertical, 13)
             .overlay(alignment: .top) {
-                Divider().overlay(Steno.Surfaces.border(colorScheme))
+                Rectangle()
+                    .fill(Steno.Surfaces.border(colorScheme))
+                    .frame(height: 1)
             }
         }
         .buttonStyle(.plain)

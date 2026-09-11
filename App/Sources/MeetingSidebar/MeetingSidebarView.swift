@@ -8,14 +8,14 @@ struct MeetingSidebarView: View {
 
     @State private var renameTarget: Meeting?
     @State private var renameTitle = ""
-    @State private var deleteTarget: Meeting?
+    @State private var deleteTarget: MeetingTrashRequest?
     @State private var folderRenameTarget: Folder?
     @State private var folderName = ""
     @State private var folderDeleteTarget: Folder?
     @State private var isCreatingFolder = false
     @State private var newFolderParentID: FolderID?
     @State private var query = ""
-    @State private var searchScope: MeetingSidebarSearchScope = .titles
+    @State private var searchScope: MeetingSidebarSearchScope = .allContent
     @State private var contentHits: [MeetingSidebarContentHit] = []
     @State private var contentSearchTask: Task<Void, Never>?
     @State private var contentIndexStore: MeetingSidebarContentIndexStore?
@@ -119,6 +119,11 @@ struct MeetingSidebarView: View {
             \.stenoMeetingCommandContext,
             meetingCommandContext(for: selection)
         )
+        .onDeleteCommand {
+            guard let context = meetingCommandContext(for: selection),
+                  context.availability.canMoveToTrash else { return }
+            context.moveToTrash()
+        }
         .toolbar(id: MacToolbarID.sidebar.rawValue) {
             ToolbarItem(
                 id: MacToolbarItemID.newFolder.rawValue,
@@ -146,15 +151,17 @@ struct MeetingSidebarView: View {
             prompt: searchScope == .titles ? "Search Titles" : "Search All Content"
         )
         .safeAreaInset(edge: .top, spacing: 0) {
-            Picker("Search scope", selection: $searchScope) {
-                Text("Titles").tag(MeetingSidebarSearchScope.titles)
-                Text("All Content").tag(MeetingSidebarSearchScope.allContent)
+            if isSearching {
+                Picker("Search scope", selection: $searchScope) {
+                    Text("Titles").tag(MeetingSidebarSearchScope.titles)
+                    Text("All Content").tag(MeetingSidebarSearchScope.allContent)
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                .labelsHidden()
+                .padding(.horizontal, Steno.Space.s)
+                .padding(.top, Steno.Space.xs)
             }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .labelsHidden()
-            .padding(.horizontal, Steno.Space.s)
-            .padding(.top, Steno.Space.xs)
         }
         .overlay {
             if model.meetings.isEmpty, model.folders.isEmpty {
@@ -199,29 +206,29 @@ struct MeetingSidebarView: View {
     }
 
     private var folderHeading: some View {
-        Button {
-            beginCreatingFolder(parentFolderID: nil)
-        } label: {
-            HStack {
-                Text("Folders")
-                    .font(.caption.weight(.semibold))
-                Spacer()
+        HStack {
+            Text("Folders")
+                .font(.caption.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            Button {
+                beginCreatingFolder(parentFolderID: nil)
+            } label: {
                 Image(systemName: "plus")
                     .font(.caption.weight(.semibold))
                     .frame(width: 20, height: 20)
             }
-            .contentShape(Rectangle())
-            .foregroundStyle(
-                isFolderHeadingTargeted
-                    ? Color(nsColor: .selectedControlTextColor)
-                    : Color.secondary
-            )
+            .buttonStyle(.plain)
+            .disabled(model.runtime == nil)
+            .help("New folder")
+            .accessibilityLabel("New folder")
+            .accessibilityHint("Create a folder")
         }
-        .buttonStyle(.plain)
-        .disabled(model.runtime == nil)
-        .help("New folder")
-        .accessibilityLabel("New folder")
-        .accessibilityHint("Create a folder")
+        .foregroundStyle(
+            isFolderHeadingTargeted
+                ? Color(nsColor: .selectedControlTextColor)
+                : Color.secondary
+        )
         .padding(.top, Steno.Space.s)
         .listRowSeparator(.hidden)
         .selectionDisabled()
@@ -412,7 +419,7 @@ struct MeetingSidebarView: View {
 
     @ViewBuilder
     private func dateSection(_ section: MeetingSection) -> some View {
-        Text(section.title)
+        Text(LocalizedStringKey(section.title))
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.top, Steno.Space.s)
@@ -472,6 +479,7 @@ struct MeetingSidebarView: View {
                 meetingDestinationMenu(context)
             }
             .disabled(!context.availability.canMove)
+            Divider()
         } else if context.meetingIDs.count == 1 {
             Button("Rename…", action: context.rename)
                 .disabled(!context.availability.canRename)
@@ -489,11 +497,13 @@ struct MeetingSidebarView: View {
             Button("Export Audio…", action: context.exportAudio)
                 .disabled(!context.availability.canExportAudio)
             Divider()
-            Button(
-                "Move to Trash…",
-                role: .destructive,
-                action: context.moveToTrash
-            )
+        }
+        if !context.meetingIDs.isEmpty {
+            Button(role: .destructive, action: context.moveToTrash) {
+                Text(MeetingTrashRequest.menuTitle(
+                    meetingCount: context.meetingIDs.count
+                ))
+            }
             .disabled(!context.availability.canMoveToTrash)
         }
     }
@@ -521,9 +531,12 @@ struct MeetingSidebarView: View {
             meetings: model.meetings,
             selectedMeetingIDs: capturedMeetingIDs,
             meetingsWithAudio: model.meetingsWithAudio,
-            isRecording: model.isRecording,
+            isRecording: model.isRecording
+                || model.isStartingRecording
+                || model.isMovingMeetingsToTrash,
             hasRuntime: model.runtime != nil
         )
+        let trashRequest = MeetingTrashRequest(meetings: selectedMeetings)
 
         return MacMeetingCommandContext(
             meetingIDs: capturedMeetingIDs,
@@ -556,8 +569,9 @@ struct MeetingSidebarView: View {
                 beginAudioExport(for: meeting)
             },
             moveToTrash: {
-                guard let meeting else { return }
-                deleteTarget = meeting
+                guard availability.canMoveToTrash,
+                      let trashRequest else { return }
+                deleteTarget = trashRequest
             }
         )
     }
@@ -1130,7 +1144,7 @@ private struct MeetingDialogs: ViewModifier {
     @Environment(AppModel.self) private var model
     @Binding var renameTitle: String
     @Binding var renameTarget: Meeting?
-    @Binding var deleteTarget: Meeting?
+    @Binding var deleteTarget: MeetingTrashRequest?
     @Binding var retranscribeTarget: Meeting?
 
     func body(content: Content) -> some View {
@@ -1182,22 +1196,26 @@ private struct MeetingDialogs: ViewModifier {
                 }
             }
             .confirmationDialog(
-                deleteTarget.map { "Move \u{201C}\($0.title)\u{201D} to the Trash?" } ?? "",
+                deleteTarget.map {
+                    String(localized: $0.confirmationTitle)
+                } ?? "",
                 isPresented: Binding(
                     get: { deleteTarget != nil },
                     set: { if !$0 { deleteTarget = nil } }
                 ),
                 titleVisibility: .visible,
                 presenting: deleteTarget
-            ) { meeting in
-                Button("Move to Trash", role: .destructive) {
-                    let target = meeting.id
+            ) { request in
+                Button(role: .destructive) {
+                    let targets = request.meetingIDs
                     deleteTarget = nil
-                    Task { await model.deleteMeeting(target) }
+                    Task { await model.deleteMeetings(targets) }
+                } label: {
+                    Text(request.actionTitle)
                 }
                 Button("Cancel", role: .cancel) { deleteTarget = nil }
-            } message: { _ in
-                Text("The entire meeting folder (audio, transcripts, runs) moves to the Trash and stays recoverable there. Speakers that are still unnamed cannot be named after deletion, because naming needs the audio file.")
+            } message: { request in
+                Text(request.message)
             }
     }
 }
@@ -1249,7 +1267,7 @@ private struct StatusBadge: View {
             .foregroundStyle(color)
     }
 
-    private var label: String {
+    private var label: LocalizedStringKey {
         switch status {
         case .draft: "Draft"
         case .recording: "Recording"

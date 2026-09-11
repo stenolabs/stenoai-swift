@@ -275,6 +275,7 @@ public struct MeetingReviewController: Sendable {
                 layout: layout,
                 engine: engine,
                 meetingID: meetingID,
+                diarizationRunID: data.runID,
                 transaction: transaction
             ), canonical.runID == data.runID,
                canonical.clusters == data.clusters

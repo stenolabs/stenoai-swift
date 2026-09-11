@@ -18,6 +18,7 @@ extension RecordingSession {
         microphoneSource: any AudioSource,
         systemAudioSource: any AudioSource,
         activityManager: any RecordingActivityManaging = RecordingActivityManager(),
+        diagnostics: any RecordingDiagnosticsRecording = NullRecordingDiagnostics(),
         ringCapacity: Int = 64,
         diskCheckInterval: Duration = .seconds(1),
         availableDiskBytes: @escaping @Sendable (URL) throws -> Int64 = {
@@ -41,6 +42,7 @@ extension RecordingSession {
             // rebuild Core Audio's device graph. Select and bind the physical
             // microphone only after that operation has fully completed.
             sourceOrder: [.system, .microphone],
+            diagnostics: diagnostics,
             activityManager: activityManager,
             ringCapacity: ringCapacity,
             diskCheckInterval: diskCheckInterval,

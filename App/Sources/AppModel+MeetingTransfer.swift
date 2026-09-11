@@ -11,10 +11,10 @@ extension AppModel {
                 parentDirectory: meetingTransferTemporaryDirectory()
             )
             if let warning = warnings.first {
-                report(warning)
+                report(verbatim: warning)
             }
         } catch {
-            report(error.localizedDescription)
+            report(verbatim: error.localizedDescription)
         }
     }
 
@@ -194,7 +194,7 @@ extension AppModel {
         do {
             return try await client.load(meetingID)
         } catch {
-            report(Self.message("The imported meeting status could not be read.", error))
+            report(verbatim: Self.message("The imported meeting status could not be read.", error))
             return nil
         }
     }
@@ -221,7 +221,7 @@ extension AppModel {
             )
             return true
         } catch {
-            report(Self.message("Processing could not be requested.", error))
+            report(verbatim: Self.message("Processing could not be requested.", error))
             return false
         }
     }

@@ -383,6 +383,38 @@ public actor Library {
 
     /// Teilnehmerliste ist meeting-skopiert, nicht run-skopiert: Anwesenheit
     /// bleibt wahr, egal wie oft neu diarisiert wird (Alt-Invariante).
+
+    /// Records which tracks this recording never got.
+    ///
+    /// Written once when the recording ends, so everything that later presents
+    /// the meeting - and above all a generated report - can say that a side of
+    /// the conversation is missing instead of silently leaving it out.
+    @discardableResult
+    public func updateUnrecordedTracks(
+        _ meetingID: MeetingID,
+        to tracks: [MediaAsset.Kind]
+    ) throws -> Meeting {
+        let result = try LibraryMutationCoordination.withExclusiveTransaction(
+            layout: layout
+        ) { transaction in
+            try transaction.validate(layout: layout)
+            var meeting = try Self.loadMeeting(meetingID, layout: layout)
+            guard meeting.unrecordedTracks != tracks else {
+                return (meeting, false)
+            }
+            meeting.unrecordedTracks = tracks
+            try JSONDocumentStore.write(
+                meeting,
+                to: layout.meetingMetadata(meetingID)
+            )
+            return (meeting, true)
+        }
+        if result.1 {
+            publishMeetingChange(meetingID)
+        }
+        return result.0
+    }
+
     public func updateMeetingParticipants(
         _ meetingID: MeetingID,
         participantIDs: [PersonID]

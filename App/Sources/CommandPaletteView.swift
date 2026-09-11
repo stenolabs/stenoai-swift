@@ -54,7 +54,7 @@ enum CommandPaletteFilter {
         if foldedTarget.hasPrefix(foldedQuery) { return 0 }
 
         // A word after the first one starting with the whole query is the
-        // classic "New Meeting" -> "m" hit. The first word is already
+        // classic "New note" -> "n" hit. The first word is already
         // covered by the prefix check above.
         let words = foldedTarget.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
         if words.dropFirst().contains(where: { $0.hasPrefix(foldedQuery) }) {
@@ -160,7 +160,7 @@ enum CommandPaletteCatalog {
         append(.markMoment, "Mark This Moment", when: state.canMarkMoment) {
             Task { await model.markMoment() }
         }
-        append(.newMeeting, "New Meeting", when: state.canCreateMeeting) {
+        append(.newMeeting, "New note", when: state.canCreateMeeting) {
             Task { await model.createDraftMeeting() }
         }
         append(
@@ -195,7 +195,12 @@ enum CommandPaletteCatalog {
         }
         if let meeting = contexts.meeting,
            meeting.availability.canMoveToTrash {
-            append(.moveToTrash, "Move Meeting to Trash…") {
+            append(
+                .moveToTrash,
+                String(localized: MeetingTrashRequest.commandTitle(
+                    meetingCount: meeting.meetingIDs.count
+                ))
+            ) {
                 meeting.moveToTrash()
             }
         }

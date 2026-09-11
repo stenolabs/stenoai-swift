@@ -5,6 +5,27 @@ import Testing
 
 @Suite("Native cloud text model providers", .serialized)
 struct CloudTextModelProviderTests {
+    @Test("Anthropic live questions send the key only in x-api-key")
+    func anthropicLiveQueryHeader() async throws {
+        let recorder = CloudRequestRecorder()
+        let configuration = makeCloudConfiguration { request in
+            recorder.append(request)
+            return try cloudResponse(request, object: ["content": [["type": "text", "text": "Synthetic answer"]]])
+        }
+        let provider = ExternalChatCompletionsLiveQueryStreamer(
+            endpoint: cloudTestEndpoint(.anthropic),
+            resolvingSecret: { _ in "synthetic-test-key" },
+            sessionConfiguration: configuration
+        )
+        var answer = ""
+        for try await chunk in provider.stream(systemInstructions: "Synthetic instruction", userPrompt: "Synthetic question") { answer += chunk }
+        #expect(answer == "Synthetic answer")
+        let request = try #require(recorder.requests.first)
+        #expect(request.value(forHTTPHeaderField: "x-api-key") == "synthetic-test-key")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(request.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
+    }
+
     @Test("OpenAI Responses uses strict structured output without storage")
     func openAIContract() async throws {
         let recorder = CloudRequestRecorder()

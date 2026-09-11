@@ -7,24 +7,36 @@ enum MacWindowPresentation {
     static let meetingsTitle: LocalizedStringResource = "Meetings"
 }
 
+/// Carries horizontal requirements across WindowStableDetail without exposing
+/// the scrollable content's ideal height to the window.
+struct MainDetailMinimumWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 560
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct ContentView: View {
+    @State private var detailMinimumWidth: CGFloat = 560
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     var body: some View {
         @Bindable var model = model
         NavigationSplitView {
-            MeetingSidebarView(selection: $model.selectedMeetingIDs)
-                // Shell status projection lives above the meetings column;
-                // the sidebar rows themselves stay untouched.
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    HomeStatusHeader(model: model)
-                }
-                .navigationSplitViewColumnWidth(
-                    min: 220,
-                    ideal: Steno.Layout.sidebarIdealWidth
-                )
+            WindowStableSidebar {
+                HomeStatusHeader(model: model)
+            } content: {
+                MeetingSidebarView(selection: $model.selectedMeetingIDs)
+            }
+            .navigationSplitViewColumnWidth(
+                min: 220,
+                ideal: Steno.Layout.sidebarIdealWidth,
+                max: 320
+            )
         } detail: {
             WindowStableDetail {
                 // Aufnahme ist ein Zustand des Meetings, kein Modus der App.
@@ -39,6 +51,11 @@ struct ContentView: View {
                     detailContent
                 }
             }
+            .frame(minWidth: detailMinimumWidth)
+        }
+        .onPreferenceChange(MainDetailMinimumWidthKey.self) { detailMinimumWidth = $0 }
+        .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
+            if window != nil { model.registerTrashUndo(with: undoManager) }
         }
         .toolbar(id: MacToolbarID.main.rawValue) {
             if model.isRecording {
@@ -97,7 +114,7 @@ struct ContentView: View {
                         Button {
                             Task { await model.createDraftMeeting() }
                         } label: {
-                            Label("New meeting draft", systemImage: "square.and.pencil")
+                            Label("New note", systemImage: "square.and.pencil")
                         }
                         .disabled(model.runtime == nil)
                         Divider()
@@ -130,7 +147,7 @@ struct ContentView: View {
                     Button {
                         Task { await model.createDraftMeeting() }
                     } label: {
-                        Label("New meeting draft", systemImage: "square.and.pencil")
+                        Label("New note", systemImage: "square.and.pencil")
                     }
                     .disabled(model.runtime == nil)
                 }
@@ -141,6 +158,7 @@ struct ContentView: View {
                     )
                 )
 
+                if model.meetings.first(where: { $0.id == model.selectedMeetingID })?.status != .draft {
                 ToolbarItem(
                     id: MacToolbarItemID.recording.rawValue,
                     placement: .primaryAction
@@ -148,7 +166,7 @@ struct ContentView: View {
                     Button {
                         Task { await model.startRecording() }
                     } label: {
-                        Label("New note", systemImage: "plus")
+                        Label("Start Recording", systemImage: "record.circle")
                     }
                     .buttonStyle(.borderedProminent)
                     .help("Start a new recording")
@@ -160,6 +178,7 @@ struct ContentView: View {
                         in: .main
                     )
                 )
+                }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -212,7 +231,7 @@ struct ContentView: View {
                 }
             case .failure(let error):
                 if (error as? CocoaError)?.code != .userCancelled {
-                    model.report(AppModel.message("The meeting package could not be opened.", error))
+                    model.report(verbatim: AppModel.message("The meeting package could not be opened.", error))
                 }
             }
         }
@@ -248,7 +267,7 @@ struct ContentView: View {
                     HStack(alignment: .bottom) {
                         UndoDeleteToast(
                             window: trashUndo,
-                            onUndo: { Task { await model.restoreTrashedMeeting() } },
+                            onUndo: { Task { await model.restoreTrashedMeetings() } },
                             onExpire: { model.expireTrashUndoIfElapsed() }
                         )
                         Spacer()
@@ -344,6 +363,38 @@ struct WindowStableDetail<Content: View>: View {
     }
 }
 
+/// Keeps a dynamic sidebar header and its scrollable content inside the size
+/// proposed by `NavigationSplitView`. `GeometryReader` forms a one-way size
+/// boundary; inside it, a normal stack gives the list the remaining height
+/// without feeding the header's ideal height back into the split view.
+struct WindowStableSidebar<Header: View, Content: View>: View {
+    private let header: Header
+    private let content: Content
+
+    init(
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.header = header()
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                header
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: .top
+            )
+        }
+    }
+}
+
 struct MultiMeetingSelectionView: View {
     let count: Int
 
@@ -354,7 +405,7 @@ struct MultiMeetingSelectionView: View {
                 systemImage: "rectangle.stack.fill"
             )
         } description: {
-            Text("Drag the selection into a folder or use Move Meetings.")
+            Text("Move the selected meetings to a folder or to the Trash.")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(MacWindowPresentation.meetingsTitle)
