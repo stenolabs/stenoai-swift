@@ -204,29 +204,29 @@ struct MeetingSidebarView: View {
     }
 
     private var folderHeading: some View {
-        Button {
-            beginCreatingFolder(parentFolderID: nil)
-        } label: {
-            HStack {
-                Text("Folders")
-                    .font(.caption.weight(.semibold))
-                Spacer()
+        HStack {
+            Text("Folders")
+                .font(.caption.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            Button {
+                beginCreatingFolder(parentFolderID: nil)
+            } label: {
                 Image(systemName: "plus")
                     .font(.caption.weight(.semibold))
                     .frame(width: 20, height: 20)
             }
-            .contentShape(Rectangle())
-            .foregroundStyle(
-                isFolderHeadingTargeted
-                    ? Color(nsColor: .selectedControlTextColor)
-                    : Color.secondary
-            )
+            .buttonStyle(.plain)
+            .disabled(model.runtime == nil)
+            .help("New folder")
+            .accessibilityLabel("New folder")
+            .accessibilityHint("Create a folder")
         }
-        .buttonStyle(.plain)
-        .disabled(model.runtime == nil)
-        .help("New folder")
-        .accessibilityLabel("New folder")
-        .accessibilityHint("Create a folder")
+        .foregroundStyle(
+            isFolderHeadingTargeted
+                ? Color(nsColor: .selectedControlTextColor)
+                : Color.secondary
+        )
         .padding(.top, Steno.Space.s)
         .listRowSeparator(.hidden)
         .selectionDisabled()
@@ -417,7 +417,7 @@ struct MeetingSidebarView: View {
 
     @ViewBuilder
     private func dateSection(_ section: MeetingSection) -> some View {
-        Text(section.title)
+        Text(LocalizedStringKey(section.title))
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.top, Steno.Space.s)
@@ -1265,7 +1265,7 @@ private struct StatusBadge: View {
             .foregroundStyle(color)
     }
 
-    private var label: String {
+    private var label: LocalizedStringKey {
         switch status {
         case .draft: "Draft"
         case .recording: "Recording"

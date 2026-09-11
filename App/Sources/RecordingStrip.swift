@@ -71,7 +71,7 @@ struct RecordingStrip: View {
                     : "Choose the report template for this recording"
             )
 
-            LevelMeter(label: "Microphone", level: model.levels[.microphone])
+            LevelMeter(label: "Microphone", level: RecordingTrackPresentation(status: model.microphoneStatus).isPaused ? .silence : model.levels[.microphone])
             LevelMeter(label: "System", level: model.levels[.system])
 
             // F11: mid-recording language switch. The pick becomes the live

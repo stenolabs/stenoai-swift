@@ -853,11 +853,11 @@ struct MeetingDetailView: View {
 
     private func statusWord(_ status: Meeting.Status) -> String {
         switch status {
-        case .draft: "Draft"
-        case .recording: "Recording"
-        case .interrupted: "Interrupted"
-        case .processing: "Processing"
-        case .ready: "Ready"
+        case .draft: String(localized: "Draft")
+        case .recording: String(localized: "Recording")
+        case .interrupted: String(localized: "Interrupted")
+        case .processing: String(localized: "Processing")
+        case .ready: String(localized: "Ready")
         }
     }
 
@@ -1090,7 +1090,7 @@ struct MeetingDetailView: View {
         }
     }
 
-    private var pendingDescription: String {
+    private var pendingDescription: LocalizedStringResource {
         if meeting?.status == .draft {
             "Write your notes on the right. Start a recording when the meeting begins."
         } else if jobs.contains(where: { $0.status == .running || $0.status == .queued }) {

@@ -335,11 +335,11 @@ struct PeopleSettingsView: View {
         let active = entry.activePrototypeCount
         let total = entry.prototypes.count
         if total == 0 {
-            parts.append("No voice samples yet")
+            parts.append(String(localized: "No voice samples yet"))
         } else if active == total {
-            parts.append("\(total) voice sample\(total == 1 ? "" : "s")")
+            parts.append(String(localized: "Voice samples: \(total)"))
         } else {
-            parts.append("\(active) of \(total) voice samples in use")
+            parts.append(String(localized: "\(active) of \(total) voice samples in use"))
         }
         if let organization = entry.person.organization {
             parts.append(organization)
@@ -714,7 +714,7 @@ private struct MergePersonSheet: View {
             }
             if let target = candidates.first(where: { $0.id == targetID }) {
                 Text(
-                    "All \(source.prototypes.count) voice sample\(source.prototypes.count == 1 ? "" : "s"), counter-evidence and meeting appearances move to \(target.person.displayName). \(source.person.displayName) disappears. This can't be undone."
+                    "Voice samples: \(source.prototypes.count). All samples, counter-evidence and meeting appearances move to \(target.person.displayName). \(source.person.displayName) disappears. This can't be undone."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -774,9 +774,9 @@ private struct PersonMatchRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Steno.Space.xs) {
             HStack(alignment: .firstTextBaseline, spacing: Steno.Space.s) {
-                Text(match.meetingTitle ?? "Deleted meeting")
+                Text(match.meetingTitle ?? String(localized: "Deleted meeting"))
                     .font(.caption)
-                Text(String(format: "%.0f%% voice match", (1 - match.suggestion.distance) * 100))
+                Text("\(Int(((1 - match.suggestion.distance) * 100).rounded()))% voice match")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Spacer()

@@ -10,6 +10,7 @@ enum MacWindowPresentation {
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     var body: some View {
@@ -38,6 +39,9 @@ struct ContentView: View {
                     detailContent
                 }
             }
+        }
+        .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
+            if window != nil { model.registerTrashUndo(with: undoManager) }
         }
         .toolbar(id: MacToolbarID.main.rawValue) {
             if model.isRecording {
@@ -96,7 +100,7 @@ struct ContentView: View {
                         Button {
                             Task { await model.createDraftMeeting() }
                         } label: {
-                            Label("New meeting draft", systemImage: "square.and.pencil")
+                            Label("New note", systemImage: "square.and.pencil")
                         }
                         .disabled(model.runtime == nil)
                         Divider()
@@ -129,7 +133,7 @@ struct ContentView: View {
                     Button {
                         Task { await model.createDraftMeeting() }
                     } label: {
-                        Label("New meeting draft", systemImage: "square.and.pencil")
+                        Label("New note", systemImage: "square.and.pencil")
                     }
                     .disabled(model.runtime == nil)
                 }
@@ -147,7 +151,7 @@ struct ContentView: View {
                     Button {
                         Task { await model.startRecording() }
                     } label: {
-                        Label("New note", systemImage: "plus")
+                        Label("Start Recording", systemImage: "record.circle")
                     }
                     .buttonStyle(.borderedProminent)
                     .help("Start a new recording")
@@ -385,7 +389,7 @@ struct MultiMeetingSelectionView: View {
                 systemImage: "rectangle.stack.fill"
             )
         } description: {
-            Text("Drag the selection into a folder or use Move Meetings.")
+            Text("Move the selected meetings to a folder or to the Trash.")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(MacWindowPresentation.meetingsTitle)

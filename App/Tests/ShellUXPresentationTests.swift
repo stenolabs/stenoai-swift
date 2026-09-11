@@ -125,7 +125,7 @@ struct CommandPaletteFilterTests {
 struct UndoDeleteToastPolicyTests {
     private let now = Date(timeIntervalSinceReferenceDate: 800_000)
 
-    @Test("the window stays active for eight seconds, then expires")
+    @Test("the window stays active for twelve seconds, then expires")
     func expiryWindow() {
         let window = UndoDeleteToastPolicy.begin(
             previous: nil,
@@ -134,13 +134,13 @@ struct UndoDeleteToastPolicyTests {
             trashedURL: URL(fileURLWithPath: "/tmp/meeting"),
             now: now
         )
-        #expect(window.isActive(now: now.addingTimeInterval(7.9)))
-        #expect(!window.isActive(now: now.addingTimeInterval(8)))
+        #expect(window.isActive(now: now.addingTimeInterval(11.9)))
+        #expect(!window.isActive(now: now.addingTimeInterval(12)))
         #expect(UndoDeleteToastPolicy.resolved(window, now: now) == window)
         #expect(
             UndoDeleteToastPolicy.resolved(
                 window,
-                now: now.addingTimeInterval(8)
+                now: now.addingTimeInterval(12)
             ) == nil
         )
     }
@@ -162,10 +162,10 @@ struct UndoDeleteToastPolicyTests {
             trashedURL: nil,
             now: secondNow
         )
-        // A fresh eight second window started at secondNow: active just
+        // A fresh twelve second window started at secondNow: active just
         // before it ends, gone just after.
         #expect(second.isActive(now: secondNow.addingTimeInterval(6)))
-        #expect(!second.isActive(now: secondNow.addingTimeInterval(9)))
+        #expect(!second.isActive(now: secondNow.addingTimeInterval(13)))
         #expect(second.title == "Second")
     }
 
@@ -192,7 +192,7 @@ struct UndoDeleteToastPolicyTests {
         #expect(window.title == String(
             localized: "\(window.items.count) meetings"
         ))
-        #expect(window.isActive(now: now.addingTimeInterval(7.9)))
+        #expect(window.isActive(now: now.addingTimeInterval(11.9)))
     }
 }
 

@@ -94,36 +94,18 @@ struct RecordingView: View {
             status: model.microphoneStatus
         )
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 20) {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(Steno.Colors.recording)
-                        .frame(width: 10, height: 10)
-                    if let start = model.recordingStartedAt {
-                        Text(start, style: .timer)
-                            .font(.title3.monospacedDigit())
+            // Timer and levels live in the persistent recording strip.
+            if let title = microphone.actionTitle,
+               let icon = microphone.actionIcon {
+                Button {
+                    Task {
+                        await model.setMicrophonePaused(!microphone.isPaused)
                     }
+                } label: {
+                    Label(title, systemImage: icon)
                 }
-                HStack(alignment: .bottom, spacing: 8) {
-                    LevelMeter(
-                        label: "Microphone",
-                        level: microphone.isPaused ? .silence : model.levels[.microphone]
-                    )
-                    if let title = microphone.actionTitle,
-                       let icon = microphone.actionIcon {
-                        Button {
-                            Task {
-                                await model.setMicrophonePaused(!microphone.isPaused)
-                            }
-                        } label: {
-                            Label(title, systemImage: icon)
-                        }
-                        .buttonStyle(.borderless)
-                        .help(title)
-                    }
-                }
-                LevelMeter(label: "System", level: model.levels[.system])
-                Spacer()
+                .buttonStyle(.borderless)
+                .help(title)
             }
             if let warning = microphone.warning {
                 Label(warning, systemImage: "mic.slash")
@@ -199,7 +181,7 @@ struct TranscriptLineView: View {
 }
 
 struct LevelMeter: View {
-    let label: String
+    let label: LocalizedStringResource
     let level: AudioLevels?
 
     var body: some View {
@@ -221,7 +203,7 @@ struct LevelMeter: View {
         // "Kommt ueberhaupt Signal an" ist die kritischste Information zu
         // Aufnahmebeginn und war fuer VoiceOver bisher unsichtbar.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label) level")
+        .accessibilityLabel(Text("\(String(localized: label)) level"))
         .accessibilityValue("\(Int(normalized * 100)) percent")
     }
 

@@ -214,7 +214,7 @@ struct StenoCommands: Commands {
         }
 
         CommandGroup(replacing: .newItem) {
-            Button("New Meeting") {
+            Button("New note") {
                 Task { await model.createDraftMeeting() }
             }
             .stenoKeyboardShortcut(.newMeeting)

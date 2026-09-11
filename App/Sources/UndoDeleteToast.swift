@@ -12,6 +12,7 @@ struct UndoDeleteToastItem: Equatable {
 /// contain one meeting or a whole confirmed batch. Finder trash URLs are the
 /// restore handles, so every successful move is captured at delete time.
 struct UndoDeleteToastWindow: Equatable {
+    let id = UUID()
     let items: [UndoDeleteToastItem]
     let expiresAt: Date
 
@@ -30,7 +31,7 @@ struct UndoDeleteToastWindow: Equatable {
 /// window and restarts its timer. Every item in one confirmed batch remains
 /// part of the same undo operation.
 enum UndoDeleteToastPolicy {
-    static let window: TimeInterval = 8
+    static let window: TimeInterval = 12
 
     static func begin(
         previous: UndoDeleteToastWindow?,
@@ -105,6 +106,10 @@ struct UndoDeleteToast: View {
                 .shadow(radius: 8)
         )
         .task(id: window.expiresAt) {
+            AccessibilityNotification.Announcement(
+                String(localized: "Moved to Trash. Undo is available in the Edit menu.")
+            ).post()
+
             let remaining = window.expiresAt.timeIntervalSinceNow
             guard remaining > 0 else {
                 onExpire()

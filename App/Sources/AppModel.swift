@@ -514,9 +514,29 @@ final class AppModel {
 
     private(set) var pendingTrashUndo: UndoDeleteToastWindow?
 
-    /// Opens (or restarts) the 8-second undo window after one confirmed trash
-    /// operation. A batch stays together, while a later operation replaces
-    /// the pending toast and starts a fresh timer.
+    @ObservationIgnored private var trashUndoTargets: [UUID: NSObject] = [:]
+    @ObservationIgnored private var availableTrashUndos: [UUID: UndoDeleteToastWindow] = [:]
+    @ObservationIgnored private weak var trashUndoManager: UndoManager?
+
+    /// Register with the window's native undo stack so text editing retains
+    /// its normal responder-chain behavior. Undo outlives the visible toast.
+    func registerTrashUndo(with manager: UndoManager?) {
+        guard let manager, let window = pendingTrashUndo,
+              trashUndoTargets[window.id] == nil else { return }
+        let target = NSObject()
+        trashUndoTargets[window.id] = target
+        trashUndoManager = manager
+        manager.registerUndo(withTarget: target) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.restoreTrashedMeetings(window: window)
+            }
+        }
+        manager.setActionName(String(localized: "Move to Trash"))
+    }
+
+    /// Opens (or restarts) the 12-second undo window after one confirmed trash
+    /// operation. A later operation replaces the toast, but earlier batches
+    /// remain in the native undo stack.
     func beginTrashUndoWindow(
         items: [UndoDeleteToastItem],
         now: Date = Date()
@@ -526,6 +546,7 @@ final class AppModel {
             items: items,
             now: now
         ) else { return }
+        availableTrashUndos[window.id] = window
         pendingTrashUndo = window
     }
 
@@ -540,10 +561,16 @@ final class AppModel {
 
     /// Undoes the latest trash operation. Every recoverable folder in the
     /// captured batch moves back under the library's exclusive mutation lock.
-    func restoreTrashedMeetings() async {
-        guard let window = pendingTrashUndo else { return }
-        pendingTrashUndo = nil
+    func restoreTrashedMeetings(window capturedWindow: UndoDeleteToastWindow? = nil) async {
+        guard let window = capturedWindow ?? pendingTrashUndo,
+              availableTrashUndos.removeValue(forKey: window.id) != nil else { return }
+        if let target = trashUndoTargets.removeValue(forKey: window.id) {
+            trashUndoManager?.removeAllActions(withTarget: target)
+        }
+        if pendingTrashUndo?.id == window.id { pendingTrashUndo = nil }
         guard let runtime else {
+            beginTrashUndoWindow(items: window.items)
+            registerTrashUndo(with: trashUndoManager)
             report(window.items.count == 1
                 ? "The meeting could not be restored."
                 : "The meetings could not be restored.")
@@ -580,6 +607,13 @@ final class AppModel {
             }
         }
 
+        // Keep only failed restore handles available for retry. Consumed
+        // handles cannot run twice, even when menu and toast race.
+        let retryable = failed.filter { $0.trashedURL != nil }
+        if !retryable.isEmpty {
+            beginTrashUndoWindow(items: retryable)
+            registerTrashUndo(with: trashUndoManager)
+        }
         if !restored.isEmpty {
             await refreshMeetings()
         }

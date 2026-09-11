@@ -80,9 +80,9 @@ struct LegacyHomeView: View {
             Task { await model.startRecording() }
         } label: {
             HStack(spacing: 7) {
-                Image(systemName: "plus")
+                Image(systemName: "record.circle")
                     .font(.caption.weight(.semibold))
-                Text("New note")
+                Text("Start Recording")
                     .font(.callout.weight(.semibold))
             }
             .padding(.horizontal, 15)
