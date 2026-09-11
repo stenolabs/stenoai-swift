@@ -462,76 +462,6 @@ struct RecordingSessionTests {
     }
 }
 
-private actor FakeAudioSource: AudioSource {
-    nonisolated let track: AudioTrack
-    nonisolated let format: AVAudioFormat
-    private var handler: AudioBufferHandler?
-    private var eventHandler: AudioSourceEventHandler?
-    private let lifecycle: SourceLifecycleLog?
-    private(set) var startCount = 0
-    private(set) var stopCount = 0
-
-    init(
-        track: AudioTrack,
-        format: AVAudioFormat = syntheticBuffer().format,
-        lifecycle: SourceLifecycleLog? = nil
-    ) {
-        self.track = track
-        self.format = format
-        self.lifecycle = lifecycle
-    }
-
-    func prepare() throws -> AVAudioFormat {
-        lifecycle?.append("prepare-\(track.rawValue)")
-        return format
-    }
-
-    func start(bufferHandler: @escaping AudioBufferHandler) {
-        lifecycle?.append("start-\(track.rawValue)")
-        handler = bufferHandler
-        startCount += 1
-    }
-
-    func start(
-        bufferHandler: @escaping AudioBufferHandler,
-        eventHandler: @escaping AudioSourceEventHandler
-    ) {
-        lifecycle?.append("start-\(track.rawValue)")
-        handler = bufferHandler
-        self.eventHandler = eventHandler
-        startCount += 1
-    }
-
-    func stop() {
-        stopCount += 1
-        handler = nil
-        eventHandler = nil
-    }
-
-    func emit(_ buffer: AVAudioPCMBuffer) async {
-        handler?(buffer)
-        await Task.yield()
-    }
-
-    func emitEvent(_ event: AudioSourceEvent) async {
-        eventHandler?(event)
-        await Task.yield()
-    }
-}
-
-private final class SourceLifecycleLog: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storedEvents: [String] = []
-
-    var events: [String] {
-        lock.withLock { storedEvents }
-    }
-
-    func append(_ event: String) {
-        lock.withLock { storedEvents.append(event) }
-    }
-}
-
 private enum LiveEventKind: Equatable, Sendable {
     case buffer
     case gapStarted
@@ -558,12 +488,12 @@ private func eventKinds(_ events: [LiveAudioEvent]) -> [LiveEventKind] {
     }
 }
 
-private struct ActivityCounts: Equatable, Sendable {
+struct ActivityCounts: Equatable, Sendable {
     let begun: Int
     let ended: Int
 }
 
-private actor FakeActivityManager: RecordingActivityManaging {
+actor FakeActivityManager: RecordingActivityManaging {
     private var begun = 0
     private var ended = 0
 

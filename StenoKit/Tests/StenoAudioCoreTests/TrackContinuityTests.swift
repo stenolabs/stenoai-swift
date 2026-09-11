@@ -5,6 +5,36 @@ import Testing
 
 @Suite("TrackContinuity")
 struct TrackContinuityTests {
+    @Test("a full writer ring reports rejected final silence")
+    func finalSilenceOverflowIsVisible() async {
+        let writer = AsyncStream.makeStream(of: TrackWriteEvent.self, bufferingPolicy: .bufferingOldest(1))
+        let live = AsyncStream.makeStream(of: LiveAudioEvent.self)
+        let overflow = OverflowCounter()
+        let start = ContinuousClock.now
+        let timeline = TrackContinuity(format: syntheticBuffer().format, sessionStart: start, writerContinuation: writer.continuation, liveContinuation: live.continuation, writerOverflowHandler: { overflow.increment() })
+        await timeline.receive(syntheticBuffer(), at: start)
+        await timeline.finish(at: start.advanced(by: .seconds(1)))
+        #expect(overflow.value == 1)
+        let captured = await captureWriter(writer.stream)
+        #expect(captured.frameCount == 4_000)
+    }
+
+    @Test("a long gap and resumed audio fit in two queue slots")
+    func longGapPreservesResumedAudio() async {
+        let writer = AsyncStream.makeStream(of: TrackWriteEvent.self, bufferingPolicy: .bufferingOldest(2))
+        let live = AsyncStream.makeStream(of: LiveAudioEvent.self)
+        let overflow = OverflowCounter()
+        let start = ContinuousClock.now
+        let timeline = TrackContinuity(format: syntheticBuffer().format, sessionStart: start, writerContinuation: writer.continuation, liveContinuation: live.continuation, alignFirstBufferToSessionStart: true, writerOverflowHandler: { overflow.increment() })
+        await timeline.receive(syntheticBuffer(), at: start.advanced(by: .seconds(120)))
+        await timeline.finish(at: start.advanced(by: .milliseconds(120_500)))
+        let capture = await captureWriter(writer.stream)
+        #expect(overflow.value == 0)
+        #expect(capture.leadingSilentFrames == 960_000)
+        #expect(capture.nonSilentBufferCount == 1)
+        #expect(capture.frameCount == 964_000)
+    }
+
     @Test("the first buffer preserves silence since the shared session start")
     func firstBufferKeepsTrackAlignment() async throws {
         let fixture = makeFixture(alignFirstBufferToSessionStart: true)
@@ -187,10 +217,10 @@ struct TrackContinuityTests {
         #expect(writer.bufferLengths.last == 3_200)
     }
 
-    @Test("a clock jump drops excess silence without overflowing or advancing time")
+    @Test("a clock jump queues its entire silence without flooding the writer ring")
     func clockJumpDropsSilenceWithoutStopping() async throws {
         let writerPair = AsyncStream.makeStream(
-            of: AVAudioPCMBuffer.self,
+            of: TrackWriteEvent.self,
             bufferingPolicy: .bufferingOldest(1)
         )
         let livePair = AsyncStream.makeStream(of: LiveAudioEvent.self)
@@ -215,14 +245,14 @@ struct TrackContinuityTests {
         let writer = await captureWriter(writerPair.stream)
         let live = await captureLive(livePair.stream)
         #expect(overflow.value == 0)
-        #expect(writer.frameCount == 2_000)
-        #expect(live.gapEndTimes == [0.25])
+        #expect(writer.frameCount == 960_000)
+        #expect(live.gapEndTimes == [120])
     }
 
     @Test("dropped real audio still overflows without advancing writer time")
     func droppedRealAudioStillOverflows() async throws {
         let writerPair = AsyncStream.makeStream(
-            of: AVAudioPCMBuffer.self,
+            of: TrackWriteEvent.self,
             bufferingPolicy: .bufferingOldest(1)
         )
         let livePair = AsyncStream.makeStream(of: LiveAudioEvent.self)
@@ -287,7 +317,7 @@ private func makeFixture(
     maximumSilenceDuration: Duration = .milliseconds(250),
     alignFirstBufferToSessionStart: Bool = false
 ) -> ContinuityFixture {
-    let writerPair = AsyncStream.makeStream(of: AVAudioPCMBuffer.self)
+    let writerPair = AsyncStream.makeStream(of: TrackWriteEvent.self)
     let livePair = AsyncStream.makeStream(of: LiveAudioEvent.self)
     let start = ContinuousClock.now
     let timeline = TrackContinuity(
@@ -307,7 +337,8 @@ private func makeFixture(
         var bufferLengths: [Int] = []
         var leadingSilentFrames = 0
         var receivedNonSilence = false
-        for await buffer in writerStream {
+        for await event in writerStream {
+            for buffer in event.testBuffers {
             frameCount += Int(buffer.frameLength)
             bufferLengths.append(Int(buffer.frameLength))
             if AudioLevelMeter.measure(buffer).peak > 0 {
@@ -316,6 +347,7 @@ private func makeFixture(
             } else if !receivedNonSilence {
                 leadingSilentFrames += Int(buffer.frameLength)
             }
+        }
         }
         return WriterCapture(
             frameCount: frameCount,
@@ -337,14 +369,15 @@ private func makeFixture(
 }
 
 private func captureWriter(
-    _ stream: sending AsyncStream<AVAudioPCMBuffer>
+    _ stream: sending AsyncStream<TrackWriteEvent>
 ) async -> WriterCapture {
     var frameCount = 0
     var nonSilentBufferCount = 0
     var bufferLengths: [Int] = []
     var leadingSilentFrames = 0
     var receivedNonSilence = false
-    for await buffer in stream {
+    for await event in stream {
+        for buffer in event.testBuffers {
         frameCount += Int(buffer.frameLength)
         bufferLengths.append(Int(buffer.frameLength))
         if AudioLevelMeter.measure(buffer).peak > 0 {
@@ -353,6 +386,7 @@ private func captureWriter(
         } else if !receivedNonSilence {
             leadingSilentFrames += Int(buffer.frameLength)
         }
+    }
     }
     return WriterCapture(
         frameCount: frameCount,
@@ -397,5 +431,27 @@ private final class OverflowCounter: @unchecked Sendable {
 
     func increment() {
         lock.withLock { count += 1 }
+    }
+}
+
+private extension TrackWriteEvent {
+    var testBuffers: [AVAudioPCMBuffer] {
+        switch self {
+        case .buffer(let owned): return [owned.buffer]
+        case let .silence(frames, format, chunkSize):
+            var remaining = frames
+            var result: [AVAudioPCMBuffer] = []
+            while remaining > 0 {
+                let count = AVAudioFrameCount(min(remaining, AVAudioFramePosition(chunkSize)))
+                let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: count)!
+                buffer.frameLength = count
+                for part in UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList) {
+                    if let data = part.mData { memset(data, 0, Int(part.mDataByteSize)) }
+                }
+                result.append(buffer)
+                remaining -= AVAudioFramePosition(count)
+            }
+            return result
+        }
     }
 }

@@ -366,6 +366,16 @@ final class RecordingModel {
 
         if let runtime, let recordedMeeting {
             do {
+                if stopFailure != nil {
+                    _ = try await runtime.library.updateMeetingStatus(recordedMeeting, to: .interrupted)
+                    let recovery = try await CaptureRecovery.run(
+                        library: runtime.library, jobStore: runtime.jobStore,
+                        onlyMeetingID: recordedMeeting, scheduleJobs: false
+                    )
+                    if let failure = recovery.failures.first(where: { !($0.error is CaptureRecovery.AdoptionRefusal) }) {
+                        throw failure.error
+                    }
+                }
                 let meeting = try await runtime.library.loadMeeting(recordedMeeting)
                 try await finalizer.finalize(
                     meeting: meeting,
@@ -373,6 +383,7 @@ final class RecordingModel {
                     library: runtime.library,
                     jobStore: runtime.jobStore
                 )
+                try CaptureRecovery.completeFinalization(layout: runtime.library.layout, meetingID: recordedMeeting)
             } catch {
                 state = .failed(error.localizedDescription)
             }

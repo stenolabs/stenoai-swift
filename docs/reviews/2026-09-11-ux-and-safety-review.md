@@ -2,6 +2,8 @@
 
 Date: 2026-09-11. Baseline: `cb03519` on `codex/legacy-look-preview`, plus the local UX changes delivered with this report.
 
+Implementation follow-up: [current fixes, verification and remaining review gate](2026-09-11-safety-followup.md). The findings below describe the original review baseline.
+
 ## Delivered changes
 
 - Home and the main toolbar say **Start Recording** and use a recording symbol. **New note** in the File menu, command palette and draft toolbar action creates a draft; Cmd-N remains a draft action.

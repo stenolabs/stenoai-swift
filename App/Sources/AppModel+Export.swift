@@ -55,7 +55,7 @@ extension AppModel {
         } catch is CancellationError {
             return
         } catch {
-            report(AppModel.message(
+            report(verbatim: AppModel.message(
                 "The stereo M4A could not be saved. The originals remain in Steno.",
                 error
             ))
@@ -113,8 +113,8 @@ extension AppModel {
             report("This meeting no longer exists.")
             return nil
         }
-        let review = await loadReviewData(meetingID: meetingID)
         let revision = await transcript(for: meetingID)
+        let review = await loadReviewData(meetingID: meetingID, revision: revision)
         let notes = await notes(for: meetingID)
         let reports = await reports(for: meetingID).map(\.result)
 
@@ -201,7 +201,7 @@ extension AppModel {
             try FileManager.default.copyItem(at: source, to: url)
             report("Saved \(url.lastPathComponent).", isError: false)
         } catch {
-            report(AppModel.message("The track could not be saved.", error))
+            report(verbatim: AppModel.message("The track could not be saved.", error))
         }
     }
 
@@ -220,7 +220,7 @@ extension AppModel {
             try Data(document.text.utf8).write(to: url, options: .atomic)
             report("Saved \(url.lastPathComponent).", isError: false)
         } catch {
-            report(AppModel.message("The file could not be written.", error))
+            report(verbatim: AppModel.message("The file could not be written.", error))
         }
     }
 }
@@ -331,7 +331,7 @@ extension AppModel {
                 line,
                 forKey: ObsidianSyncPreferences.lastSyncSummaryKey
             )
-            report(line, isError: false)
+            report(verbatim: line, isError: false)
         } else {
             let line = "Obsidian export failed for "
                 + summary.failures.joined(separator: ", ")
@@ -340,7 +340,7 @@ extension AppModel {
                 line,
                 forKey: ObsidianSyncPreferences.lastSyncSummaryKey
             )
-            report(line)
+            report(verbatim: line)
         }
     }
 
@@ -420,7 +420,7 @@ extension AppModel {
                 fileName: document.name
             )
         } catch {
-            report(AppModel.message("The PDF could not be rendered.", error))
+            report(verbatim: AppModel.message("The PDF could not be rendered.", error))
             return
         }
         guard PDFExportPresentation.presentShareSheet(for: url, anchoredTo: nil) else {

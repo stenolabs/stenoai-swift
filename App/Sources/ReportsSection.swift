@@ -24,6 +24,9 @@ struct ReportsSection: View {
     let meetingID: MeetingID
     /// Fuer den Hinweis, wie viele Sprecher noch unbestaetigt sind.
     let review: MeetingReviewData?
+    /// Tracks this recording never got. Minutes made from an incomplete
+    /// recording have to say so, or they read like complete ones.
+    var unrecordedTracks: [MediaAsset.Kind] = []
 
     @State private var reports: [StoredTemplateResult] = []
     @State private var selectedRunID: RunID?
@@ -74,6 +77,12 @@ struct ReportsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let caveat = MeetingCompleteness.reportCaveat(unrecordedTracks) {
+                Label(caveat, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(Steno.Colors.uncertain)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Text("Minutes")
                     .font(.headline)
@@ -407,7 +416,10 @@ struct ReportsSection: View {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(
-                        stored.result.markdown,
+                        MeetingCompleteness.minutesForCopying(
+                            stored.result.markdown,
+                            unrecordedTracks: unrecordedTracks
+                        ),
                         forType: .string
                     )
                 } label: {

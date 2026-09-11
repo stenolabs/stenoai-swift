@@ -22,7 +22,7 @@ struct AskBarView: View {
     @State private var service: LiveQueryService?
     @State private var draft = ""
     /// One confirmation per app session before the first external send.
-    @State private var externalSendAcknowledged = false
+    @State private var externalConsent = ExternalSendConsent()
     @State private var pendingExternalNotice: LocalizedExternalModelNotice?
     @State private var showRecipeSaveSheet = false
     /// Shared '/'-recipe support; the menu only opens on an empty composer.
@@ -175,7 +175,8 @@ struct AskBarView: View {
         guard let service, canSubmit else { return }
         // Outbound disclosure before the first external send per session,
         // mirroring the reports flow. Apple Foundation Models stays silent.
-        if textModelSettings.selectedEndpoint != nil, !externalSendAcknowledged {
+        if !externalConsent.permits(textModelSettings.selectedEndpoint) {
+            externalConsent.prepare(textModelSettings.selectedEndpoint)
             pendingExternalNotice = makeExternalNotice()
             return
         }
@@ -265,8 +266,9 @@ struct AskBarView: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Send once, then keep asking") {
-                    externalSendAcknowledged = true
+                    let accepted = externalConsent.accept(current: textModelSettings.selectedEndpoint)
                     pendingExternalNotice = nil
+                    guard accepted else { submit(); return }
                     if let service, canSubmit {
                         service.ask(question: draft)
                         draft = ""

@@ -56,7 +56,9 @@ struct DemoDataStatusInvalidationTests {
             )
             _ = try await library.appendRevision(rerun)
 
-            #expect(await model.adoptPendingTranscript(for: meeting.id))
+            #expect(!(await model.adoptPendingTranscript(for: meeting.id, expectedCurrentRevisionID: current.id, expectedCandidateID: rerun.id)))
+            #expect(!(await model.adoptPendingTranscript(for: meeting.id, expectedCurrentRevisionID: userEdit.id, expectedCandidateID: RevisionID())))
+            #expect(await model.adoptPendingTranscript(for: meeting.id, expectedCurrentRevisionID: userEdit.id, expectedCandidateID: rerun.id))
             try await waitForDemoItem(
                 meeting.id,
                 toBecome: .modified,

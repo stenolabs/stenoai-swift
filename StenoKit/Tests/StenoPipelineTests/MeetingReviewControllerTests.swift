@@ -7,6 +7,28 @@ import Testing
 
 @Suite("Meeting review controller")
 struct MeetingReviewControllerTests {
+    @Test("a displayed corrected revision keeps its archived review after a newer run")
+    func displayedRevisionRetainsReview() async throws {
+        try await withTemporaryDirectory { root in
+            let library = try Library.open(at: root)
+            let meeting = try await library.createMeeting(title: "Synthetic revision history", status: .ready)
+            let first = RunID(), second = RunID()
+            var firstCluster = reviewCluster(meetingID: meeting.id, runID: first)
+            firstCluster.reviewState = .generic
+            let secondCluster = reviewCluster(meetingID: meeting.id, runID: second)
+            try seedIdentitySuggestionRun(meetingID: meeting.id, runID: first, cluster: firstCluster, library: library)
+            try seedIdentitySuggestionRun(meetingID: meeting.id, runID: second, cluster: secondCluster, library: library)
+            let store = MeetingReviewStore(layout: library.layout)
+            try store.save(MeetingReviewDocument(runID: first, clusters: [firstCluster]), meetingID: meeting.id)
+            try store.save(MeetingReviewDocument(runID: second, clusters: [secondCluster]), meetingID: meeting.id)
+            let revision = TranscriptRevision(meetingID: meeting.id, origin: .userEdit(RevisionID()), turns: [TranscriptTurn(speaker: .cluster(runID: first, clusterID: firstCluster.clusterID), start: 0, end: 1, segments: [])])
+            let review = try #require(try await MeetingReviewAssembler.load(library: library, revision: revision))
+            #expect(review.runID == first)
+            #expect(review.clusters.first?.reviewState == .generic)
+            #expect(try store.load(meetingID: meeting.id)?.runID == second)
+        }
+    }
+
     @Test("demo meetings reject every voice-evidence action without store changes")
     func demoMeetingVoiceEvidenceActionsFailClosed() async throws {
         try await withTemporaryDirectory { root in
@@ -239,6 +261,11 @@ struct MeetingReviewControllerTests {
             #expect(persisted.runID == currentRunID)
             #expect(persisted.clusters[0].reviewState == .generic)
             #expect(currentReview != previousReview)
+            let archivePath = relativePath(of: library.layout.meetingDirectory(meeting.id).appendingPathComponent("review-history/\(previousRunID).json"), below: root)
+            let archivedValue = afterNonReview.removeValue(forKey: archivePath)
+            let archived = try #require(archivedValue)
+            #expect(archived.data == previousReview.data)
+            #expect(try MeetingReviewStore(layout: library.layout).load(meetingID: meeting.id, runID: previousRunID)?.clusters == [previousCluster])
             #expect(afterNonReview == beforeNonReview)
         }
     }

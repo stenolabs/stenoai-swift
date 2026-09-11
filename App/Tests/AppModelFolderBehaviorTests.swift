@@ -6,6 +6,22 @@ import Testing
 @Suite("App model folder behavior")
 @MainActor
 struct AppModelFolderBehaviorTests {
+    @Test("trash cancellation drains a successor queued after the first snapshot")
+    func trashDrainsSuccessor() async throws {
+        let meetingID = MeetingID()
+        let parent = Job(kind: .finalASR, meetingID: meetingID, status: .running)
+        let child = Job(kind: .diarization, meetingID: meetingID)
+        var jobs = [parent]
+        var cancelled: [JobID] = []
+        try await AppModel.cancelJobsBeforeTrash(meetingID: meetingID, list: { jobs }, cancel: { id in
+            cancelled.append(id)
+            // The parent finished just before cancellation, leaving its child.
+            jobs = id == parent.id ? [child] : []
+        })
+        #expect(cancelled == [parent.id, child.id])
+        #expect(jobs.isEmpty)
+    }
+
     @Test("a failed folder refresh keeps the last visible folder structure")
     func failedFolderRefreshKeepsVisibleFolders() async throws {
         try await withIsolatedModel { model, libraryURL in

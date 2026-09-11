@@ -7,7 +7,7 @@ public actor TrackContinuity {
 
     private let format: AVAudioFormat
     private let sessionStart: ContinuousClock.Instant
-    private let writerContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation
+    private let writerContinuation: AsyncStream<TrackWriteEvent>.Continuation
     private let liveContinuation: AsyncStream<LiveAudioEvent>.Continuation
     private let stallTimeout: Duration
     private let maximumSilenceFrames: AVAudioFrameCount
@@ -22,7 +22,7 @@ public actor TrackContinuity {
     public init(
         format: AVAudioFormat,
         sessionStart: ContinuousClock.Instant,
-        writerContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation,
+        writerContinuation: AsyncStream<TrackWriteEvent>.Continuation,
         liveContinuation: AsyncStream<LiveAudioEvent>.Continuation,
         stallTimeout: Duration = .seconds(2),
         maximumSilenceDuration: Duration = .milliseconds(250),
@@ -79,6 +79,7 @@ public actor TrackContinuity {
                 }
                 ownedBuffer = trimmed
             }
+            guard writtenFrames >= targetFrame else { return }
             needsHostRealignment = false
         }
 
@@ -183,14 +184,17 @@ public actor TrackContinuity {
     }
 
     private func fillSilence(toFrame targetFrame: AVAudioFramePosition) {
-        while writtenFrames < targetFrame {
-            let remaining = targetFrame - writtenFrames
-            let frameCount = AVAudioFrameCount(
-                min(remaining, AVAudioFramePosition(maximumSilenceFrames))
-            )
-            guard let silence = makeSilence(frameCount: frameCount) else { return }
-            guard yieldToWriter(silence, isSilence: true) else { return }
-            writtenFrames += AVAudioFramePosition(frameCount)
+        guard writtenFrames < targetFrame else { return }
+        let frames = targetFrame - writtenFrames
+        switch writerContinuation.yield(.silence(frames: frames, format: format, chunkSize: maximumSilenceFrames)) {
+        case .enqueued:
+            writtenFrames = targetFrame
+        case .dropped:
+            writerOverflowHandler()
+        case .terminated:
+            break
+        @unknown default:
+            break
         }
     }
 
@@ -208,7 +212,7 @@ public actor TrackContinuity {
         _ buffer: sending AVAudioPCMBuffer,
         isSilence: Bool
     ) -> Bool {
-        switch writerContinuation.yield(buffer) {
+        switch writerContinuation.yield(.buffer(OwnedAudioBuffer(buffer: buffer))) {
         case .dropped:
             if !isSilence { writerOverflowHandler() }
             return false
@@ -219,25 +223,6 @@ public actor TrackContinuity {
         @unknown default:
             return false
         }
-    }
-
-    private func makeSilence(
-        frameCount: AVAudioFrameCount
-    ) -> AVAudioPCMBuffer? {
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: format,
-            frameCapacity: frameCount
-        ) else {
-            return nil
-        }
-        buffer.frameLength = frameCount
-        for audioBuffer in UnsafeMutableAudioBufferListPointer(
-            buffer.mutableAudioBufferList
-        ) {
-            guard let data = audioBuffer.mData else { continue }
-            memset(data, 0, Int(audioBuffer.mDataByteSize))
-        }
-        return buffer
     }
 
     private func isCompatible(_ other: AVAudioFormat) -> Bool {

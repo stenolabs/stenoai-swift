@@ -3,10 +3,9 @@ import StenoDomain
 import StenoIdentity
 import StenoLibrary
 
-/// Persistierter Review-Stand eines Meetings (Bestätigungen, Markierungen).
-/// Liegt als review.json im Meeting-Ordner und ist an den Diarisierungslauf
-/// gebunden: nach einer Re-Diarisierung passt die runID nicht mehr und der
-/// Stand wird verworfen statt fälschlich weiterverwendet (Run-Provenienz).
+/// Persisted confirmations and flags for exactly one diarization run.
+/// The current compatibility document lives in review.json; superseded run
+/// reviews are archived so corrected older transcripts retain their review.
 public struct MeetingReviewDocument: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 1
 
@@ -36,16 +35,33 @@ public struct MeetingReviewStore: Sendable {
         layout.meetingDirectory(meetingID).appendingPathComponent("review.json")
     }
 
-    public func load(meetingID: MeetingID) throws -> MeetingReviewDocument? {
-        try Self.load(meetingID: meetingID, layout: layout)
+    public func load(meetingID: MeetingID, runID: RunID? = nil) throws -> MeetingReviewDocument? {
+        try LibraryMutationCoordination.withExclusiveTransaction(layout: layout) { transaction in
+            try load(meetingID: meetingID, runID: runID, transaction: transaction)
+        }
     }
 
     func load(
         meetingID: MeetingID,
+        runID: RunID? = nil,
         transaction: LibraryMutationTransaction
     ) throws -> MeetingReviewDocument? {
         try transaction.validate(layout: layout)
-        return try Self.load(meetingID: meetingID, layout: layout)
+        let current = try Self.load(meetingID: meetingID, layout: layout)
+        guard let runID else { return current }
+        if current?.runID == runID { return current }
+        let archivedURL = historyURL(meetingID, runID: runID)
+        guard FileManager.default.fileExists(atPath: archivedURL.path) else { return nil }
+        let archived = try JSONDecoder().decode(MeetingReviewDocument.self, from: Data(contentsOf: archivedURL))
+        guard archived.schemaVersion == MeetingReviewDocument.currentSchemaVersion,
+              archived.runID == runID else { return nil }
+        return archived
+    }
+
+    private func historyURL(_ meetingID: MeetingID, runID: RunID) -> URL {
+        layout.meetingDirectory(meetingID)
+            .appendingPathComponent("review-history", isDirectory: true)
+            .appendingPathComponent("\(runID).json")
     }
 
     private static func load(
@@ -84,6 +100,14 @@ public struct MeetingReviewStore: Sendable {
         try transaction.validate(layout: layout)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        // Archive the outgoing run before replacing the compatibility file.
+        // An archive failure leaves the previous review untouched.
+        if let previous = try Self.load(meetingID: meetingID, layout: layout),
+           previous.runID != document.runID {
+            let archivedURL = historyURL(meetingID, runID: previous.runID)
+            try FileManager.default.createDirectory(at: archivedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try AtomicFile.write(try encoder.encode(previous), to: archivedURL)
+        }
         try AtomicFile.write(try encoder.encode(document), to: url(meetingID))
     }
 }
@@ -169,6 +193,12 @@ public struct MeetingReviewSnapshot: Sendable {
 }
 
 public enum MeetingReviewAssembler {
+    /// Bind a UI or export review to the exact revision it displays.
+    public static func load(library: Library, revision: TranscriptRevision) async throws -> MeetingReviewData? {
+        guard let runID = diarizationRunID(in: revision) else { return nil }
+        return try await load(library: library, meetingID: revision.meetingID, diarizationRunID: runID)
+    }
+
     /// Baut den Review-Stand aus dem jüngsten abgeschlossenen
     /// Vorschlagslauf. Persistierte Bestätigungen werden übernommen, wenn
     /// sie zum aktuellen Diarisierungslauf gehören.
@@ -247,6 +277,7 @@ public enum MeetingReviewAssembler {
         let store = MeetingReviewStore(layout: layout)
         if let saved = try store.load(
             meetingID: meetingID,
+            runID: diarizationRunID,
             transaction: transaction
         ),
            saved.runID == diarizationRunID {

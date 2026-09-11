@@ -20,7 +20,7 @@ extension AppModel {
             await refreshMeetings()
             return folder
         } catch {
-            report(AppModel.message("The folder could not be created.", error))
+            report(verbatim: AppModel.message("The folder could not be created.", error))
             return nil
         }
     }
@@ -31,7 +31,7 @@ extension AppModel {
             _ = try await folderStore.renameFolder(folderID, to: name)
             await refreshMeetings()
         } catch {
-            report(AppModel.message("The folder could not be renamed.", error))
+            report(verbatim: AppModel.message("The folder could not be renamed.", error))
         }
     }
 
@@ -45,7 +45,7 @@ extension AppModel {
             _ = try await folderStore.setColorToken(colorToken, of: folderID)
             await refreshMeetings()
         } catch {
-            report(AppModel.message("The folder color could not be changed.", error))
+            report(verbatim: AppModel.message("The folder color could not be changed.", error))
         }
     }
 
@@ -59,7 +59,7 @@ extension AppModel {
             _ = try await folderStore.setIcon(icon, of: folderID)
             await refreshMeetings()
         } catch {
-            report(AppModel.message("The folder icon could not be changed.", error))
+            report(verbatim: AppModel.message("The folder icon could not be changed.", error))
         }
     }
 
@@ -83,7 +83,7 @@ extension AppModel {
             )
         } catch {
             await refreshMeetings()
-            report(AppModel.message("The folder could not be deleted.", error))
+            report(verbatim: AppModel.message("The folder could not be deleted.", error))
             return false
         }
 
@@ -117,7 +117,7 @@ extension AppModel {
                 return false
             }
             await refreshMeetings()
-            report(AppModel.message("The folder could not be deleted.", error))
+            report(verbatim: AppModel.message("The folder could not be deleted.", error))
             return false
         }
     }
@@ -136,7 +136,7 @@ extension AppModel {
             await refreshMeetings()
             return true
         } catch {
-            report(AppModel.message("The folder could not be moved.", error))
+            report(verbatim: AppModel.message("The folder could not be moved.", error))
             return false
         }
     }
@@ -166,7 +166,7 @@ extension AppModel {
             )
             await refreshMeetings()
         } catch {
-            report(AppModel.message("The folders could not be reordered.", error))
+            report(verbatim: AppModel.message("The folders could not be reordered.", error))
         }
     }
 
@@ -192,7 +192,7 @@ extension AppModel {
             return true
         } catch {
             await refreshMeetings()
-            report(AppModel.message("The meetings could not be moved.", error))
+            report(verbatim: AppModel.message("The meetings could not be moved.", error))
             return false
         }
     }

@@ -312,11 +312,11 @@ struct RecordingStartStateTests {
         #expect(tasks.isEmpty)
     }
 
-    @Test("a failed stop interrupts the meeting but still schedules final transcription")
-    func failedStopKeepsFinalTranscriptionIndependent() {
+    @Test("a failed stop defers transcription until capture recovery succeeds")
+    func failedStopDefersFinalTranscription() {
         let followUp = RecordingStopFollowUp.make(stopFailed: true)
 
         #expect(followUp.meetingStatusCorrection == .interrupted)
-        #expect(followUp.jobKinds == [.finalASR])
+        #expect(followUp.jobKinds.isEmpty)
     }
 }

@@ -45,7 +45,7 @@ struct RecordingStopFollowUp: Equatable {
     static func make(stopFailed: Bool) -> RecordingStopFollowUp {
         RecordingStopFollowUp(
             meetingStatusCorrection: stopFailed ? .interrupted : nil,
-            jobKinds: [.finalASR]
+            jobKinds: stopFailed ? [] : [.finalASR]
         )
     }
 }
@@ -157,6 +157,10 @@ final class AppModel {
     @ObservationIgnored
     private let languagePreferences: TranscriptionLanguagePreferences
     @ObservationIgnored
+    private var tracksMissingAtStart: Set<AudioTrack> = []
+    @ObservationIgnored
+    private let recordingDiagnostics: any RecordingDiagnosticsRecording
+    @ObservationIgnored
     private let recordingPermissionClient: MacRecordingPermissionClient
     @ObservationIgnored
     private let recordingPermissionDefaults: UserDefaults
@@ -222,6 +226,8 @@ final class AppModel {
         transcriptionCatalog: TranscriptionModelCatalog = .standard,
         modelCoordinator: ModelInstallationCoordinator? = nil,
         recordingPermissionClient: MacRecordingPermissionClient = .live,
+        recordingDiagnostics: any RecordingDiagnosticsRecording
+            = RecordingDiagnosticsDestination.standard(),
         recordingPermissionDefaults: UserDefaults = .standard,
         recordingPermissionIdentity: @escaping @MainActor () -> String? = {
             CurrentCodeSigningIdentity.cacheKey()
@@ -266,6 +272,7 @@ final class AppModel {
         self.meetingTrasher = meetingTrasher
         self.languagePreferences = languagePreferences
         self.recordingPermissionClient = recordingPermissionClient
+        self.recordingDiagnostics = recordingDiagnostics
         self.recordingPermissionDefaults = recordingPermissionDefaults
         self.recordingPermissionIdentity = recordingPermissionIdentity
         self.nativeGemmaRecordingBarrier = nativeGemmaRecordingBarrier
@@ -467,8 +474,31 @@ final class AppModel {
     /// Fehler bleiben stehen, bis der Benutzer sie bestaetigt - eine
     /// Bestaetigung nicht: Sie hat ihre Arbeit getan, sobald sie gelesen ist,
     /// und stuende sonst noch da, wenn man laengst woanders arbeitet.
+    /// Shows a message from the catalogue.
+    ///
+    /// Takes a `LocalizationValue` rather than a `String` on purpose: the
+    /// notice line is displayed through `Text(notice.text)`, which performs no
+    /// lookup of its own, so a plain string would stay English no matter what
+    /// language the app runs in. This way a literal cannot be forgotten.
     func report(
-        _ text: String,
+        _ text: String.LocalizationValue,
+        isError: Bool = true,
+        autoDismiss: Bool? = nil
+    ) {
+        report(verbatim: Self.noticeText(text), isError: isError, autoDismiss: autoDismiss)
+    }
+
+    /// Resolves a notice literal against the catalogue.
+    nonisolated static func noticeText(
+        _ text: String.LocalizationValue
+    ) -> String {
+        String(localized: text)
+    }
+
+    /// Shows a message that has already been assembled, for the few places
+    /// that build their text from more than one piece.
+    func report(
+        verbatim text: String,
         isError: Bool = true,
         autoDismiss: Bool? = nil
     ) {
@@ -627,7 +657,7 @@ final class AppModel {
             } else if destinationWasOccupied {
                 report("A folder already occupies the original location. \(item.title) is still in the Trash.")
             } else if let lastError {
-                report(AppModel.message("The meeting could not be restored.", lastError))
+                report(verbatim: AppModel.message("The meeting could not be restored.", lastError))
             } else {
                 report("The meeting could not be restored.")
             }
@@ -645,8 +675,12 @@ final class AppModel {
     /// Rohe Swift-Fehlerbeschreibungen gehören nicht in die Oberfläche.
     /// Der Klartext sagt, was nicht ging; das technische Detail hängt hinten
     /// dran, damit ein Fehlerbericht noch etwas hergibt.
-    static func message(_ summary: String, _ error: Error) -> String {
-        "\(summary) (\(error.localizedDescription))"
+    /// A summary from the catalogue plus the untouched reason from the system.
+    nonisolated static func message(
+        _ summary: String.LocalizationValue,
+        _ error: Error
+    ) -> String {
+        "\(String(localized: summary)) (\(error.localizedDescription))"
     }
 
     nonisolated static func pipelineStartupWarningMessage(
@@ -1062,7 +1096,7 @@ final class AppModel {
             ))
             noteJobEnqueued(for: failedJob.meetingID)
         } catch {
-            report(Self.message("The Apple retry could not be queued.", error))
+            report(verbatim: Self.message("The Apple retry could not be queued.", error))
         }
     }
 
@@ -1160,7 +1194,7 @@ final class AppModel {
         bundleIDs: Set<ModelBundleID>,
         locale: Locale,
         coordinator: ModelInstallationCoordinator,
-        errorSummary: String
+        errorSummary: String.LocalizationValue
     ) async -> Bool {
         let identity = ModelInstallationIdentity()
         let consentGranted = modelConsent.isGranted
@@ -1211,7 +1245,7 @@ final class AppModel {
         coordinator: ModelInstallationCoordinator,
         consentGranted: Bool,
         identity: ModelInstallationIdentity,
-        errorSummary: String
+        errorSummary: String.LocalizationValue
     ) async -> Bool {
         do {
             try await coordinator.install(
@@ -2314,7 +2348,7 @@ final class AppModel {
             )
             await refreshMeetings()
         } catch {
-            report(AppModel.message("The template could not be pinned.", error))
+            report(verbatim: AppModel.message("The template could not be pinned.", error))
         }
     }
 
@@ -2347,7 +2381,7 @@ final class AppModel {
             return
         } catch {
             _ = recordingStartState.fail()
-            report(Self.message(
+            report(verbatim: Self.message(
                 "The recording could not be started because the local model helper could not be stopped safely.",
                 error
             ))
@@ -2367,15 +2401,23 @@ final class AppModel {
             return
         }
         do {
-            let discovery = await refreshMicrophoneDiscovery()
-            // Pin exactly the selected input when the user clicks Record.
-            // The system-audio source starts first and may rebuild Core Audio's
-            // graph, but it must not change which physical mic this recording
-            // will accept. There is deliberately no default-device fallback.
-            let recordingMicrophone = try RecordingMicrophoneSelection.resolve(
-                mode: recordingMicrophoneMode,
-                discovery: discovery
-            )
+            // Resolved on every bind attempt rather than once here.
+            //
+            // A recording is normally started before joining the call, and the
+            // automatic choice looks for the microphone a meeting app is using.
+            // Deciding once at this moment meant the recording either failed
+            // outright or was stuck with that answer for its whole length. It
+            // still pins one specific device per attempt, and there is
+            // deliberately no fallback to some other default device.
+            let microphoneMode = recordingMicrophoneMode
+            let resolveMicrophone: @Sendable () async -> String? = { [weak self] in
+                guard let self else { return nil }
+                let discovery = await self.refreshMicrophoneDiscovery()
+                return try? RecordingMicrophoneSelection.resolve(
+                    mode: microphoneMode,
+                    discovery: discovery
+                ).uid
+            }
             let appendedTimelineOffset: TimeInterval
             let meeting: Meeting
             switch target {
@@ -2435,19 +2477,28 @@ final class AppModel {
                 library: runtime.library,
                 outputDirectory: captureDirectory,
                 microphoneSource: MicRecorder(
-                    selectedDeviceUID: recordingMicrophone.uid
+                    resolveDeviceUID: resolveMicrophone,
+                    diagnostics: recordingDiagnostics
                 ),
-                systemAudioSource: SystemAudioRecorder()
+                systemAudioSource: SystemAudioRecorder(),
+                diagnostics: recordingDiagnostics
             )
             try await session.start(
                 silenceAutoStop: PlatformPreferences.silenceAutoStopConfig()
             )
 
+            // A track that never bound has no live stream, and a system track
+            // that never bound says something about the permission too.
+            let unavailableTracks = await session.failedTracks()
+            let systemAudioStatus = Self.systemAudioPermission(
+                afterStartFailures: unavailableTracks,
+                current: recordingPermissions.systemAudio
+            )
             recordingPermissions = RecordingAudioPermissionState(
                 microphone: micStatus,
-                systemAudio: .authorized
+                systemAudio: systemAudioStatus
             )
-            cacheSystemAudioPermission(.authorized)
+            cacheSystemAudioPermission(systemAudioStatus)
 
             self.session = session
             microphoneStatus = await session.status(for: .microphone)
@@ -2490,7 +2541,7 @@ final class AppModel {
                 )
                 : nil
 
-            for track in AudioTrack.allCases {
+            for track in AudioTrack.allCases where unavailableTracks[track] == nil {
                 let stream = try await session.liveAudioEvents(for: track)
                 do {
                     let provider = try transcriptionRegistry.resolve(
@@ -2517,6 +2568,28 @@ final class AppModel {
             startLevelPolling(session: session)
             await refreshMeetings()
             recordingStartState.succeed()
+            // Reported last so it is the notice that stays on screen: a
+            // recording that is missing a track must not look like a normal
+            // one. The notice is an error, so it waits to be acknowledged.
+            tracksMissingAtStart = Set(unavailableTracks.keys)
+            if !unavailableTracks.isEmpty {
+                recordingDiagnostics.record(RecordingDiagnosticEvent(
+                    name: "recording-started-partial",
+                    details: [
+                        "meetingID": String(describing: meeting.id),
+                        "missingTracks": unavailableTracks.keys
+                            .map(\.rawValue)
+                            .sorted()
+                            .joined(separator: ", "),
+                        "reasons": unavailableTracks
+                            .sorted { $0.key.rawValue < $1.key.rawValue }
+                            .map { "\($0.key.rawValue): \($0.value)" }
+                            .joined(separator: "; "),
+                    ]
+                ))
+                recordingDiagnostics.flush()
+                report(verbatim: Self.partialRecordingMessage(unavailableTracks))
+            }
         } catch {
             if let audioError = error as? AudioRecordingError,
                audioError == .systemAudioPermissionDenied {
@@ -2527,7 +2600,21 @@ final class AppModel {
                 cacheSystemAudioPermission(.denied)
             }
             let failedMeetingID = recordingStartState.fail()
-            report(Self.message("The recording could not be started.", error))
+            // The notice below disappears once it is read. This entry is what
+            // is left to explain the failure afterwards.
+            recordingDiagnostics.record(RecordingDiagnosticEvent(
+                name: "recording-start-failed",
+                details: [
+                    "error": "\(error)",
+                    "meetingID": failedMeetingID.map(String.init(describing:))
+                        ?? "none",
+                    "microphone": Self.diagnosticDescription(
+                        of: recordingMicrophoneMode
+                    ),
+                ]
+            ))
+            recordingDiagnostics.flush()
+            report(verbatim: Self.message("The recording could not be started.", error))
             await abortRecordingCleanup()
             if let failedMeetingID {
                 _ = try? await runtime.library.updateMeetingStatus(
@@ -2536,6 +2623,71 @@ final class AppModel {
                 )
             }
             await refreshMeetings()
+        }
+    }
+
+
+
+    /// What a start actually proved about the system audio permission.
+    ///
+    /// A recording that keeps running without its system track must not store
+    /// `.authorized` for a permission the system refused, and a track that
+    /// failed for an unrelated reason proves nothing either way.
+    nonisolated static func systemAudioPermission(
+        afterStartFailures failures: [AudioTrack: AudioRecordingError],
+        current: AudioPermissionStatus
+    ) -> AudioPermissionStatus {
+        switch failures[.system] {
+        case .none:
+            return .authorized
+        case .systemAudioPermissionDenied:
+            return .denied
+        case .some:
+            return current
+        }
+    }
+
+    /// Announces a track that joined the running recording after all, so the
+    /// standing warning about it does not keep saying something untrue.
+    nonisolated static func trackReboundMessage(_ track: AudioTrack) -> String {
+        let name = Self.trackName(track)
+        return String(
+            localized: "The \(name) joined the recording and is being recorded now."
+        )
+    }
+
+    /// Says plainly which track is missing and that recording continues, so a
+    /// half recording is never mistaken for a complete one.
+    nonisolated static func partialRecordingMessage(
+        _ unavailable: [AudioTrack: AudioRecordingError]
+    ) -> String {
+        let ordered = unavailable.sorted { $0.key.rawValue < $1.key.rawValue }
+        let names = ordered
+            .map { Self.trackName($0.key) }
+            .joined(separator: String(localized: " and "))
+        let reasons = ordered
+            .map { $0.value.localizedDescription }
+            .joined(separator: " ")
+        return String(
+            localized: "Recording without \(names): \(reasons) Everything else is still being recorded."
+        )
+    }
+
+    nonisolated static func trackName(_ track: AudioTrack) -> String {
+        track == .microphone
+            ? String(localized: "microphone")
+            : String(localized: "system audio")
+    }
+
+    /// Names the pinned input for diagnostics without touching meeting content.
+    static func diagnosticDescription(
+        of mode: RecordingMicrophoneMode
+    ) -> String {
+        switch mode {
+        case .automatic:
+            return "automatic"
+        case .manual(let device):
+            return "manual \(device.name) [\(device.uid)]"
         }
     }
 
@@ -2563,7 +2715,7 @@ final class AppModel {
             let result = try await session.stop()
             if result.stopReason != .requested,
                let error = await session.lastError() {
-                report(error.localizedDescription)
+                report(verbatim: error.localizedDescription)
             }
 
             if let notesSession = notesSessions[meetingID] {
@@ -2595,7 +2747,7 @@ final class AppModel {
             for task in tasks {
                 task.cancel()
             }
-            report(Self.message("The recording could not be stopped cleanly.", error))
+            report(verbatim: Self.message("The recording could not be stopped cleanly.", error))
         }
 
         let followUp = RecordingStopFollowUp.make(stopFailed: stopFailed)
@@ -2604,6 +2756,21 @@ final class AppModel {
                 meetingID,
                 to: status
             )
+        }
+        var followUpKinds = followUp.jobKinds
+        if stopFailed {
+            do {
+                let recovery = try await CaptureRecovery.run(
+                    library: runtime.library, jobStore: runtime.jobStore,
+                    onlyMeetingID: meetingID, scheduleJobs: false
+                )
+                if let failure = recovery.failures.first(where: { !($0.error is CaptureRecovery.AdoptionRefusal) }) {
+                    throw failure.error
+                }
+                followUpKinds = [.finalASR]
+            } catch {
+                report(verbatim: Self.message("Recording recovery must finish before transcription can start. The original files are preserved.", error))
+            }
         }
         // F8: Ein entschiedenes Erkennungsergebnis wird mit dem Final-ASR-
         // Job gepinnt (Start- und erkannte Sprache; die erkannte bleibt
@@ -2615,7 +2782,7 @@ final class AppModel {
                 detectedLocaleIdentifier: $0
             )
         }
-        for kind in followUp.jobKinds {
+        for kind in followUpKinds {
             do {
                 let meeting = try await runtime.library.loadMeeting(meetingID)
                 let job = kind == .finalASR
@@ -2631,12 +2798,13 @@ final class AppModel {
                         importGenerationID: meeting.processingGenerationID
                     )
                 try await runtime.jobStore.enqueue(job)
+                try CaptureRecovery.completeFinalization(layout: runtime.library.layout, meetingID: meetingID)
                 noteJobEnqueued(for: meetingID)
             } catch {
                 // Ein fehlgeschlagener Folgelauf darf die Aufnahme nicht
                 // als gescheitert markieren: der Fehler wird gemeldet und
                 // der naechste Lauf versucht es erneut.
-                report(Self.message("A follow-up run could not be scheduled.", error))
+                report(verbatim: Self.message("A follow-up run could not be scheduled.", error))
             }
         }
         self.session = nil
@@ -2692,7 +2860,7 @@ final class AppModel {
             nativeGemmaRecordingBarrierIsHeld = false
         } catch {
             // Keep the held flag set. Native Gemma then remains unavailable until restart.
-            report(Self.message(
+            report(verbatim: Self.message(
                 "The local model helper remains disabled because its recording barrier could not be released safely.",
                 error
             ))
@@ -2985,10 +3153,27 @@ final class AppModel {
                     updated[track] = await session.levels(for: track)
                 }
                 let microphoneStatus = await session.status(for: .microphone)
+                let missingTracks = Set(await session.failedTracks().keys)
                 self?.levels = updated
                 self?.applyMicrophoneStatus(microphoneStatus)
+                await self?.applyReboundTracks(missing: missingTracks)
                 try? await Task.sleep(for: .milliseconds(100))
             }
+        }
+    }
+
+
+    /// Notices when a track that was missing at the start has joined, and says
+    /// so. The warning about a missing track must not outlive the gap.
+    private func applyReboundTracks(missing: Set<AudioTrack>) async {
+        let returned = tracksMissingAtStart.subtracting(missing)
+        guard !returned.isEmpty else { return }
+        tracksMissingAtStart = missing
+        for track in returned.sorted(by: { $0.rawValue < $1.rawValue }) {
+            report(verbatim: Self.trackReboundMessage(track), isError: false)
+        }
+        if missing.isEmpty, notice?.isError == true {
+            dismissNotice()
         }
     }
 
@@ -3057,7 +3242,7 @@ final class AppModel {
             report("This file has already been imported.")
             selectedMeetingID = existingMeetingID
         } catch {
-            report(Self.message("The import failed.", error))
+            report(verbatim: Self.message("The import failed.", error))
         }
     }
 

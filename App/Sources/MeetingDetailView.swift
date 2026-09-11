@@ -211,7 +211,10 @@ struct MeetingDetailView: View {
                     Button {
                         showContinueRecordingConfirmation = true
                     } label: {
-                        Label("Continue Recording", systemImage: "record.circle")
+                        Label(
+                            meeting?.status == .draft ? "Record into this note" : "Continue Recording",
+                            systemImage: meeting?.status == .draft ? "mic" : "record.circle"
+                        )
                     }
                     .help("Record additional audio into this meeting")
                 }
@@ -643,6 +646,8 @@ struct MeetingDetailView: View {
             in: revision,
             query: transcriptQuery
         )
+        var seenSpeakers: Set<SpeakerReference?> = []
+        let originCueIndices = Set(hits.filter { seenSpeakers.insert(revision.turns[$0].speaker).inserted })
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Steno.Space.m) {
@@ -660,7 +665,7 @@ struct MeetingDetailView: View {
                             meeting: meeting
                         )
                     }
-                    ReportsSection(meetingID: meetingID, review: review)
+                    ReportsSection(meetingID: meetingID, review: review, unrecordedTracks: meeting?.unrecordedTracks ?? [])
                     Divider()
                     if isSearchingTranscript {
                         Text(hits.isEmpty
@@ -675,6 +680,7 @@ struct MeetingDetailView: View {
                             turn: turn,
                             review: review,
                             presentationContext: speakerPresentationContext,
+                            showsOriginCue: originCueIndices.contains(index),
                             meetingID: meetingID,
                             isEditing: editingTurn == index,
                             beginEditing: { editingTurn = index },
@@ -819,10 +825,15 @@ struct MeetingDetailView: View {
                 Spacer()
                 Button("Use the new one") {
                     Task {
-                        if await model.adoptPendingTranscript(for: meetingID) {
-                            self.pending = nil
-                            revision = await model.transcript(for: meetingID)
-                        }
+                        guard let displayed = revision else { return }
+                        _ = await model.adoptPendingTranscript(
+                            for: meetingID,
+                            expectedCurrentRevisionID: displayed.id,
+                            expectedCandidateID: pending.id
+                        )
+                        revision = await model.transcript(for: meetingID)
+                        self.pending = await model.pendingTranscript(for: meetingID)
+                        review = await model.loadReviewData(meetingID: meetingID, revision: revision)
                     }
                 }
                 .controlSize(.small)
@@ -847,6 +858,11 @@ struct MeetingDetailView: View {
         }
         if meeting.status != .ready {
             parts.append(statusWord(meeting.status))
+        }
+        if let missing = MeetingCompleteness.missingTracksWord(
+            meeting.unrecordedTracks
+        ) {
+            parts.append(missing)
         }
         return parts.joined(separator: "  ·  ")
     }
@@ -1109,7 +1125,7 @@ struct MeetingDetailView: View {
             )
             revision = await model.transcript(for: meetingID)
             jobs = await model.jobs(for: meetingID)
-            review = await model.loadReviewData(meetingID: meetingID)
+            review = await model.loadReviewData(meetingID: meetingID, revision: revision)
             meeting = await model.meeting(meetingID)
             updateTransferDetail(
                 await model.loadMeetingTransferDetail(meetingID: meetingID)
@@ -1268,6 +1284,7 @@ struct TranscriptTurnRow: View {
     let turn: TranscriptTurn
     let review: MeetingReviewData?
     var presentationContext: SpeakerPresentationContext = .empty
+    var showsOriginCue = true
     let meetingID: MeetingID
     var isEditing = false
     var beginEditing: (() -> Void)?
@@ -1328,10 +1345,18 @@ struct TranscriptTurnRow: View {
                             .foregroundStyle(.secondary)
                     }
                     if let cue = SpeakerDisplayLocalization.originCue(presentation) {
-                        Label(cue, systemImage: "text.badge.checkmark")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel(cue)
+                        if showsOriginCue {
+                            Label(cue, systemImage: "text.badge.checkmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(cue)
+                        } else {
+                            Image(systemName: "text.badge.checkmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .help(Text(cue))
+                                .accessibilityLabel(cue)
+                        }
                     }
                 }
                 if isEditing {

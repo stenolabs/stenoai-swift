@@ -12,6 +12,9 @@ struct MeetingReportsSection: View {
     let meetingID: MeetingID
     let review: MeetingReviewData?
     let hasTranscript: Bool
+    /// Tracks this recording never got. Copied and shared minutes have to carry
+    /// that warning; the label on screen does not travel with the text.
+    var unrecordedTracks: [MediaAsset.Kind] = []
 
     @State private var presentation = MeetingReportsPresentation()
     @State private var preflight: TemplateRenderPreflight?
@@ -271,14 +274,18 @@ struct MeetingReportsSection: View {
 
             HStack(spacing: Steno.Space.l) {
                 Button {
-                    UIPasteboard.general.string = presentation.shownReport?
-                        .result.markdown
+                    UIPasteboard.general.string = MeetingReportsViewState
+                        .copyText(
+                            for: presentation.shownReport,
+                            unrecordedTracks: unrecordedTracks
+                        )
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                 }
 
                 if let payload = MeetingReportsViewState.sharePayload(
-                    for: presentation.shownReport
+                    for: presentation.shownReport,
+                    unrecordedTracks: unrecordedTracks
                 ) {
                     Button {
                         shareDisclosure.request(

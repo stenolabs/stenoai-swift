@@ -144,6 +144,7 @@ struct ContentView: View {
                     )
                 )
 
+                if model.meetings.first(where: { $0.id == model.selectedMeetingID })?.status != .draft {
                 ToolbarItem(
                     id: MacToolbarItemID.recording.rawValue,
                     placement: .primaryAction
@@ -163,6 +164,7 @@ struct ContentView: View {
                         in: .main
                     )
                 )
+                }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -215,7 +217,7 @@ struct ContentView: View {
                 }
             case .failure(let error):
                 if (error as? CocoaError)?.code != .userCancelled {
-                    model.report(AppModel.message("The meeting package could not be opened.", error))
+                    model.report(verbatim: AppModel.message("The meeting package could not be opened.", error))
                 }
             }
         }

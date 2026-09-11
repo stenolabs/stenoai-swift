@@ -110,4 +110,32 @@ struct MeetingReportsViewStateTests {
         resource.locale = Locale(identifier: "en")
         return String(localized: resource)
     }
+
+    @Test("copied minutes from an incomplete recording carry the warning")
+    func copiedMinutesCarryTheWarning() {
+        let stored = report("## Decisions\n- ship it", createdAt: 1)
+
+        let copied = MeetingReportsViewState.copyText(
+            for: stored,
+            unrecordedTracks: [.micTrack]
+        )
+
+        // What leaves the app has to say it is incomplete; the label on screen
+        // does not travel with the text.
+        #expect(copied?.contains("Incomplete recording") == true)
+        #expect(copied?.contains("ship it") == true)
+    }
+
+    @Test("copied minutes from a complete recording are untouched")
+    func completeMinutesAreUntouched() {
+        let stored = report("## Decisions\n- ship it", createdAt: 1)
+
+        let copied = MeetingReportsViewState.copyText(
+            for: stored,
+            unrecordedTracks: []
+        )
+
+        #expect(copied == "## Decisions\n- ship it")
+    }
+
 }

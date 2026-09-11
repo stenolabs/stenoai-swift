@@ -302,4 +302,57 @@ struct MeetingMarkdownTests {
         #expect(markdown.contains("**[00:14] Others:** Remote follow-up."))
         #expect(!markdown.contains("**Participants:**"))
     }
+    @Test("an exported meeting that lost a track says so in the document")
+    func exportStatesTheMissingTrack() {
+        var meeting = Meeting(
+            id: MeetingID(),
+            title: "Quarterly",
+            createdAt: Date(timeIntervalSince1970: 1),
+            status: .ready
+        )
+        meeting.unrecordedTracks = [.micTrack]
+
+        let markdown = MeetingMarkdown.render(
+            MeetingMarkdown.Input(
+                meeting: meeting,
+                revision: nil,
+                authorLine: nil,
+                speakerNames: [:],
+                participants: [],
+                notes: nil,
+                reports: []
+            )
+        )
+
+        // The document travels without the app around it, so the warning has
+        // to be inside it. Minutes that quietly omit one side of a
+        // conversation must not read like complete ones.
+        #expect(markdown.contains("microphone"))
+        #expect(markdown.lowercased().contains("not recorded"))
+    }
+
+    @Test("a complete meeting exports without any such note")
+    func completeExportHasNoNote() {
+        let meeting = Meeting(
+            id: MeetingID(),
+            title: "Quarterly",
+            createdAt: Date(timeIntervalSince1970: 1),
+            status: .ready
+        )
+
+        let markdown = MeetingMarkdown.render(
+            MeetingMarkdown.Input(
+                meeting: meeting,
+                revision: nil,
+                authorLine: nil,
+                speakerNames: [:],
+                participants: [],
+                notes: nil,
+                reports: []
+            )
+        )
+
+        #expect(!markdown.lowercased().contains("not recorded"))
+    }
+
 }

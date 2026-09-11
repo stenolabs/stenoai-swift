@@ -191,7 +191,7 @@ extension AppModel {
     }
 
     private func withStore(
-        _ summary: String,
+        _ summary: String.LocalizationValue,
         _ work: (IdentityStore) async throws -> Void
     ) async -> Bool {
         guard let runtime else { return false }

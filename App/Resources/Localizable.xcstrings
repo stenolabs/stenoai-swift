@@ -9430,22 +9430,6 @@
         }
       }
     },
-    "Record a conversation or create a meeting draft from the note options.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zeichne ein Gespräch auf oder erstelle über die Notizoptionen einen Meeting-Entwurf."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "錄製對話，或從筆記選項建立會議草稿。"
-          }
-        }
-      }
-    },
     "Settings": {
       "localizations": {
         "de": {
@@ -10049,6 +10033,1634 @@
           "stringUnit": {
             "state": "translated",
             "value": "為此會議錄製更多音訊"
+          }
+        }
+      }
+    },
+    " and ": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " und "
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " 和 "
+          }
+        }
+      }
+    },
+    "%@ %@. The microphone track is paused; system audio continues.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@. Die Mikrofonspur ist angehalten, der Systemton läuft weiter."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@。麥克風音軌已暫停；系統音訊會繼續錄製。"
+          }
+        }
+      }
+    },
+    "%@ missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ fehlt"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少 %@"
+          }
+        }
+      }
+    },
+    "%@ reconnected. Microphone recording resumed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ wieder verbunden. Die Mikrofonaufnahme läuft weiter."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已重新連線。麥克風已恢復錄製。"
+          }
+        }
+      }
+    },
+    "%@ was not recorded, so these minutes do not cover %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ wurde nicht aufgenommen. Dieses Protokoll enthält daher nicht, %2$@."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未錄製 %@，因此這份會議紀錄不包含 %@。"
+          }
+        }
+      }
+    },
+    "A line cannot be emptied. Delete the meeting instead, or leave the text as it is.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Zeile kann nicht geleert werden. Lösche stattdessen das Meeting oder lass den Text stehen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不能清空這一行。請刪除會議，或保留原文。"
+          }
+        }
+      }
+    },
+    "A transcription for this meeting is already running.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für dieses Meeting läuft bereits eine Transkription."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這場會議的逐字稿正在產生中。"
+          }
+        }
+      }
+    },
+    "Another audio export is already running.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es läuft bereits ein anderer Audio-Export."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一項音訊輸出正在進行中。"
+          }
+        }
+      }
+    },
+    "Close the meeting import before changing the transcription language.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließe den Meeting-Import, bevor du die Transkriptionssprache änderst."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先關閉會議匯入，再變更逐字稿語言。"
+          }
+        }
+      }
+    },
+    "Folder deleted.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner gelöscht."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資料夾已刪除。"
+          }
+        }
+      }
+    },
+    "Folder deleted. %lld meeting%@ moved back to the date list.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner gelöscht. %1$lld Meeting%2$@ zurück in die Datumsliste verschoben."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資料夾已刪除。%lld 場會議%@已移回日期清單。"
+          }
+        }
+      }
+    },
+    "Interrupted recordings could not be inspected. Existing recording files remain stored.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unterbrochene Aufnahmen konnten nicht geprüft werden. Vorhandene Aufnahmedateien bleiben gespeichert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法檢查中斷的錄音。現有錄音檔仍保留。"
+          }
+        }
+      }
+    },
+    "Live transcript (%@) interrupted: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Transkript (%1$@) unterbrochen: %2$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即時逐字稿（%@）已中斷：%@"
+          }
+        }
+      }
+    },
+    "Meeting imported. The received unencrypted file may still remain in Downloads and can be included in search indexing or backups.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting importiert. Die empfangene unverschlüsselte Datei kann weiterhin in „Downloads“ liegen und in Suchindizes oder Backups landen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會議已匯入。收到的未加密檔案可能仍在「下載項目」中，並可能納入搜尋索引或備份。"
+          }
+        }
+      }
+    },
+    "Microphone track": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Mikrofonspur"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麥克風音軌"
+          }
+        }
+      }
+    },
+    "Moment marked.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moment markiert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已標記時刻。"
+          }
+        }
+      }
+    },
+    "No live transcript (%@): %@. Audio recording continues.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Live-Transkript (%1$@): %2$@. Die Audioaufnahme läuft weiter."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無即時逐字稿（%@）：%@。錄音會繼續。"
+          }
+        }
+      }
+    },
+    "No microphone access. Allow it in System Settings under Privacy & Security.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Zugriff auf das Mikrofon. Erlaube ihn in den Systemeinstellungen unter „Datenschutz & Sicherheit“."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有麥克風存取權。請在「系統設定」的「隱私權與安全性」中允許存取。"
+          }
+        }
+      }
+    },
+    "No original track found for the voice sample.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Hörprobe wurde keine Originalspur gefunden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到語音樣本的原始音軌。"
+          }
+        }
+      }
+    },
+    "No readable audio tracks are available for export.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es sind keine lesbaren Audiospuren für den Export vorhanden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可讀取的音軌可供輸出。"
+          }
+        }
+      }
+    },
+    "One of the selected original tracks is no longer available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine der gewählten Originalspuren ist nicht mehr verfügbar."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其中一個所選的原始音軌已無法使用。"
+          }
+        }
+      }
+    },
+    "Parakeet could not be installed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parakeet konnte nicht installiert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法安裝 Parakeet。"
+          }
+        }
+      }
+    },
+    "People could not be loaded.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Personen konnten nicht geladen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法載入人物。"
+          }
+        }
+      }
+    },
+    "Playback could not be started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Wiedergabe konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開始播放。"
+          }
+        }
+      }
+    },
+    "Playback failed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Wiedergabe ist fehlgeschlagen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放失敗。"
+          }
+        }
+      }
+    },
+    "Playback failed: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Wiedergabe ist fehlgeschlagen: %1$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放失敗：%@"
+          }
+        }
+      }
+    },
+    "Playback is off while recording: it would be captured into the recording.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Während der Aufnahme ist die Wiedergabe aus: Sie würde mit aufgenommen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音時無法播放，因為播放的聲音會被錄入。"
+          }
+        }
+      }
+    },
+    "Processing could not be requested.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Verarbeitung konnte nicht angefordert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法要求處理。"
+          }
+        }
+      }
+    },
+    "Recording without %@: %@ Everything else is still being recorded.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme ohne %1$@: %2$@ Alles andere wird weiterhin aufgenommen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音不包含 %@：%@。其他音訊仍會繼續錄製。"
+          }
+        }
+      }
+    },
+    "Renaming failed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Umbenennen ist fehlgeschlagen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新命名失敗。"
+          }
+        }
+      }
+    },
+    "Saved %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ gesichert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存 %@。"
+          }
+        }
+      }
+    },
+    "Speaker recognition could not be started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sprechererkennung konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開始辨識說話者。"
+          }
+        }
+      }
+    },
+    "Switched to the new transcription.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur neuen Transkription gewechselt."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已切換至新的逐字稿。"
+          }
+        }
+      }
+    },
+    "System audio track": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Systemtonspur"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統音訊音軌"
+          }
+        }
+      }
+    },
+    "That is not a valid e-mail address.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das ist keine gültige E-Mail-Adresse."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這不是有效的電子郵件地址。"
+          }
+        }
+      }
+    },
+    "The %@ joined the recording and is being recorded now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ist zur Aufnahme dazugekommen und wird jetzt mit aufgenommen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已加入錄音，現在正在錄製。"
+          }
+        }
+      }
+    },
+    "The Apple retry could not be queued.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der erneute Apple-Versuch konnte nicht eingereiht werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法將 Apple 重試加入佇列。"
+          }
+        }
+      }
+    },
+    "The correction could not be saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Korrektur konnte nicht gesichert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存修正。"
+          }
+        }
+      }
+    },
+    "The draft could not be created.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Entwurf konnte nicht angelegt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法建立草稿。"
+          }
+        }
+      }
+    },
+    "The e-mail address could not be saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die E-Mail-Adresse konnte nicht gesichert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存電子郵件地址。"
+          }
+        }
+      }
+    },
+    "The file could not be written.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datei konnte nicht geschrieben werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法寫入檔案。"
+          }
+        }
+      }
+    },
+    "The folder could not be created.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner konnte nicht angelegt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法建立資料夾。"
+          }
+        }
+      }
+    },
+    "The folder could not be deleted and some meeting assignments could not be restored. %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner konnte nicht gelöscht werden, und einige Meeting-Zuordnungen konnten nicht wiederhergestellt werden. %1$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法刪除資料夾，且部分會議的資料夾指派無法還原。%@"
+          }
+        }
+      }
+    },
+    "The folder could not be deleted.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner konnte nicht gelöscht werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法刪除資料夾。"
+          }
+        }
+      }
+    },
+    "The folder could not be moved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner konnte nicht verschoben werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法移動資料夾。"
+          }
+        }
+      }
+    },
+    "The folder could not be renamed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner konnte nicht umbenannt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法重新命名資料夾。"
+          }
+        }
+      }
+    },
+    "The folder no longer exists and the current library state was reloaded.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den Ordner gibt es nicht mehr. Der aktuelle Stand der Bibliothek wurde neu geladen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資料夾已不存在，已重新載入目前的資料庫狀態。"
+          }
+        }
+      }
+    },
+    "The folders could not be reordered.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Reihenfolge der Ordner konnte nicht geändert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法重新排序資料夾。"
+          }
+        }
+      }
+    },
+    "The import failed and cleanup must be retried.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Import ist fehlgeschlagen, das Aufräumen muss erneut versucht werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入失敗，需要重試清理。"
+          }
+        }
+      }
+    },
+    "The import failed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Import ist fehlgeschlagen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入失敗。"
+          }
+        }
+      }
+    },
+    "The imported meeting status could not be read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Status des importierten Meetings konnte nicht gelesen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取已匯入會議的狀態。"
+          }
+        }
+      }
+    },
+    "The marker could not be saved. (%@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Markierung konnte nicht gesichert werden. (%1$@)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存標記。（%@）"
+          }
+        }
+      }
+    },
+    "The meeting could not be moved to the trash.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Meeting konnte nicht in den Papierkorb gelegt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法將會議移至垃圾桶。"
+          }
+        }
+      }
+    },
+    "The meeting package could not be imported.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Meeting-Paket konnte nicht importiert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法匯入會議套件。"
+          }
+        }
+      }
+    },
+    "The meeting package could not be opened.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Meeting-Paket konnte nicht geöffnet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開啟會議套件。"
+          }
+        }
+      }
+    },
+    "The meeting package could not be prepared.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Meeting-Paket konnte nicht vorbereitet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法準備會議套件。"
+          }
+        }
+      }
+    },
+    "The meetings could not be moved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Meetings konnten nicht verschoben werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法移動會議。"
+          }
+        }
+      }
+    },
+    "The minutes could not be started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Protokoll konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開始產生會議紀錄。"
+          }
+        }
+      }
+    },
+    "The model list could not be read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Modellliste konnte nicht gelesen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取模型清單。"
+          }
+        }
+      }
+    },
+    "The models could not be installed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Modelle konnten nicht installiert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法安裝模型。"
+          }
+        }
+      }
+    },
+    "The new transcription could not be taken over.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die neue Transkription konnte nicht übernommen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法採用新的逐字稿。"
+          }
+        }
+      }
+    },
+    "The notes could not be saved. (%@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Notizen konnten nicht gesichert werden. (%1$@)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存筆記。（%@）"
+          }
+        }
+      }
+    },
+    "The organization could not be saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Organisation konnte nicht gesichert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存組織。"
+          }
+        }
+      }
+    },
+    "The participant could not be added.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die teilnehmende Person konnte nicht hinzugefügt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法新增參與者。"
+          }
+        }
+      }
+    },
+    "The participant could not be removed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die teilnehmende Person konnte nicht entfernt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法移除參與者。"
+          }
+        }
+      }
+    },
+    "The private import copy could not be removed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die private Importkopie konnte nicht entfernt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法移除私密匯入副本。"
+          }
+        }
+      }
+    },
+    "The recording could not be started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開始錄音。"
+          }
+        }
+      }
+    },
+    "The recording could not be stopped cleanly.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme konnte nicht sauber beendet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法正常停止錄音。"
+          }
+        }
+      }
+    },
+    "The run could not be cancelled.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Lauf konnte nicht abgebrochen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法取消執行。"
+          }
+        }
+      }
+    },
+    "The run is already saving its result and can no longer be cancelled.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Lauf sichert bereits sein Ergebnis und kann nicht mehr abgebrochen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "執行正在儲存結果，已無法取消。"
+          }
+        }
+      }
+    },
+    "The stereo M4A could not be saved. The originals remain in Steno.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Stereo-M4A konnte nicht gesichert werden. Die Originale bleiben in Steno."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存立體聲 M4A。原始音檔仍保留在 Steno 中。"
+          }
+        }
+      }
+    },
+    "The title must not be empty.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Titel darf nicht leer sein."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標題不可為空白。"
+          }
+        }
+      }
+    },
+    "The track could not be saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Spur konnte nicht gesichert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存音軌。"
+          }
+        }
+      }
+    },
+    "These people could not be merged.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Personen konnten nicht zusammengeführt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法合併這些人物。"
+          }
+        }
+      }
+    },
+    "This correction did not belong to the open meeting and was not saved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Korrektur gehörte nicht zum geöffneten Meeting und wurde nicht gesichert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這項修正不屬於已開啟的會議，因此未儲存。"
+          }
+        }
+      }
+    },
+    "This file has already been imported.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Datei wurde bereits importiert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此檔案已經匯入。"
+          }
+        }
+      }
+    },
+    "This line no longer exists. Reopen the meeting and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Zeile gibt es nicht mehr. Öffne das Meeting erneut und versuche es noch einmal."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此行已不存在。請重新開啟會議後再試一次。"
+          }
+        }
+      }
+    },
+    "This meeting has no original audio to transcribe again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu diesem Meeting gibt es kein Originalaudio, das erneut transkribiert werden könnte."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這場會議沒有可重新轉錄的原始音訊。"
+          }
+        }
+      }
+    },
+    "This meeting no longer exists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting gibt es nicht mehr."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這場會議已不存在。"
+          }
+        }
+      }
+    },
+    "This meeting was already present. Nothing was changed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting war bereits vorhanden. Es wurde nichts geändert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這場會議已存在。未做任何變更。"
+          }
+        }
+      }
+    },
+    "This person could not be deleted.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Person konnte nicht gelöscht werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法刪除此人物。"
+          }
+        }
+      }
+    },
+    "This person could not be renamed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Person konnte nicht umbenannt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法重新命名此人物。"
+          }
+        }
+      }
+    },
+    "This person could not be restored.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Person konnte nicht wiederhergestellt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法還原此人物。"
+          }
+        }
+      }
+    },
+    "This transcript changed while you were editing. Reopen the meeting and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Transkript hat sich geändert, während du bearbeitet hast. Öffne das Meeting erneut und versuche es noch einmal."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你編輯時這份逐字稿已變更。請重新開啟會議後再試一次。"
+          }
+        }
+      }
+    },
+    "This voice sample could not be updated.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Hörprobe konnte nicht aktualisiert werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法更新此語音樣本。"
+          }
+        }
+      }
+    },
+    "Transcribing again. The previous transcript stays available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird erneut transkribiert. Das bisherige Transkript bleibt verfügbar."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在重新轉錄。先前的逐字稿仍可使用。"
+          }
+        }
+      }
+    },
+    "Transcription could not be scheduled.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Transkription konnte nicht eingeplant werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法安排轉錄。"
+          }
+        }
+      }
+    },
+    "Transcription could not be started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Transkription konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開始轉錄。"
+          }
+        }
+      }
+    },
+    "microphone": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "das Mikrofon"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麥克風"
+          }
+        }
+      }
+    },
+    "system audio": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "den Systemton"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統音訊"
+          }
+        }
+      }
+    },
+    "what the other participants said": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "was die anderen Teilnehmenden gesagt haben"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他參與者所說的內容"
+          }
+        }
+      }
+    },
+    "what you said yourself": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "was du selbst gesagt hast"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你自己所說的內容"
+          }
+        }
+      }
+    },
+    "Record into this note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In diese Notiz aufnehmen"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音至此筆記"
+          }
+        }
+      }
+    },
+    "No new speaker-recognition run was scheduled. Check the pending transcription or existing processing results.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wurde kein neuer Sprechererkennungslauf eingeplant. Prüfe die ausstehende Transkription oder vorhandene Verarbeitungsergebnisse."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未安排新的說話者辨識。請檢查待處理的逐字稿或現有處理結果。"
+          }
+        }
+      }
+    },
+    "Recording recovery must finish before transcription can start. The original files are preserved.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme muss erst wiederhergestellt werden, bevor die Transkription starten kann. Die Originaldateien bleiben erhalten."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "必須先完成錄音復原，才能開始轉錄。原始檔案仍保留。"
+          }
+        }
+      }
+    },
+    "Record a conversation or choose New note to create a meeting draft.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeichne ein Gespräch auf oder wähle „Neue Notiz“ für einen Meeting-Entwurf."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄製對話，或選擇「新增筆記」建立會議草稿。"
           }
         }
       }

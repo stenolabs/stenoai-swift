@@ -54,7 +54,7 @@ extension AppModel {
             report("This transcript changed while you were editing. Reopen the meeting and try again.")
             return nil
         } catch {
-            report(AppModel.message("The correction could not be saved.", error))
+            report(verbatim: AppModel.message("The correction could not be saved.", error))
             return nil
         }
     }
@@ -68,17 +68,19 @@ extension AppModel {
     /// Nimmt den geparkten Neulauf als aktuellen Stand. Die eigene Korrektur
     /// bleibt als Revision erhalten, sie ist nur nicht mehr die angezeigte.
     @discardableResult
-    func adoptPendingTranscript(for meetingID: MeetingID) async -> Bool {
+    func adoptPendingTranscript(for meetingID: MeetingID, expectedCurrentRevisionID: RevisionID, expectedCandidateID: RevisionID) async -> Bool {
         guard let runtime else { return false }
         do {
             guard try await runtime.library.adoptPendingRevision(
-                meetingID: meetingID
+                meetingID: meetingID,
+                expectedCurrentRevisionID: expectedCurrentRevisionID,
+                expectedCandidateID: expectedCandidateID
             ) != nil else { return false }
             await demoDataMeetingContentDidChange(meetingID)
             report("Switched to the new transcription.", isError: false)
             return true
         } catch {
-            report(AppModel.message("The new transcription could not be taken over.", error))
+            report(verbatim: AppModel.message("The new transcription could not be taken over.", error))
             return false
         }
     }

@@ -283,7 +283,8 @@ struct MeetingDetailView: View {
             MeetingReportsSection(
                 meetingID: meetingID,
                 review: review,
-                hasTranscript: revision?.turns.isEmpty == false
+                hasTranscript: revision?.turns.isEmpty == false,
+                unrecordedTracks: meeting?.unrecordedTracks ?? []
             )
             transcriptSection()
         }

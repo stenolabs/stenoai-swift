@@ -89,6 +89,18 @@ public struct Meeting: Codable, Equatable, Sendable {
     /// Die ausdrücklich gewählten ASR-Provider für dieses Meeting.
     /// Nil bezeichnet ein ungepinntes (insbesondere ein altes) Meeting.
     public var transcriptionPlan: TranscriptionPlan?
+    /// Tracks this recording should have had but never got, for example a
+    /// microphone that Core Audio would not hand over while the recording ran.
+    ///
+    /// Stated explicitly rather than derived from the assets: a single track is
+    /// normal on iOS and a defect on the Mac, so counting assets would be a
+    /// guess. Anything that presents this meeting to a person - the library,
+    /// and above all a generated report - has to be able to say that a side of
+    /// the conversation is missing instead of silently leaving it out.
+    public var unrecordedTracks: [MediaAsset.Kind]
+
+    /// False when a track is known to be missing from this recording.
+    public var isRecordingComplete: Bool { unrecordedTracks.isEmpty }
 
     public var isDemo: Bool {
         metadata?.demoProvenance != nil
@@ -113,7 +125,8 @@ public struct Meeting: Codable, Equatable, Sendable {
         folderID: FolderID? = nil,
         metadata: MeetingMetadata? = nil,
         sourceLocale: MeetingSourceLocale? = nil,
-        transcriptionPlan: TranscriptionPlan? = nil
+        transcriptionPlan: TranscriptionPlan? = nil,
+        unrecordedTracks: [MediaAsset.Kind] = []
     ) {
         self.schemaVersion = schemaVersion
         self.id = id
@@ -126,6 +139,7 @@ public struct Meeting: Codable, Equatable, Sendable {
         self.metadata = metadata
         self.sourceLocale = sourceLocale
         self.transcriptionPlan = transcriptionPlan
+        self.unrecordedTracks = unrecordedTracks
     }
 
     public enum Status: String, Codable, Equatable, Sendable {
@@ -152,6 +166,7 @@ public struct Meeting: Codable, Equatable, Sendable {
         case metadata
         case sourceLocale
         case transcriptionPlan
+        case unrecordedTracks
     }
 
     public init(from decoder: Decoder) throws {
@@ -179,5 +194,9 @@ public struct Meeting: Codable, Equatable, Sendable {
             TranscriptionPlan.self,
             forKey: .transcriptionPlan
         )
+        unrecordedTracks = try container.decodeIfPresent(
+            [MediaAsset.Kind].self,
+            forKey: .unrecordedTracks
+        ) ?? []
     }
 }
