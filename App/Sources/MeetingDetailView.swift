@@ -78,6 +78,9 @@ struct MeetingDetailView: View {
     @State private var observationState = MeetingDetailObservationState()
     @State private var showMeetingTransferExport = false
     @State private var showContinueRecordingConfirmation = false
+    @State private var shortRecording: ShortRecordingDecision?
+    @State private var dismissedShortRecording: JobID?
+    @State private var isConfirmingShortRecording = false
     /// Kurzer Bestaetigungsblitz nach dem Kopieren der Notizen: das Icon im
     /// Werkzeugkasten zeigt fuer einen Moment den Haken statt der Aktion.
     @State private var showsCopyNotesFlash = false
@@ -112,6 +115,7 @@ struct MeetingDetailView: View {
                     Divider()
                 }
                 meetingTransferTopStatus
+                shortRecordingBanner
                 pendingBanner
                 legacyUpgradeTopStatus
                 jobStatusBar
@@ -245,6 +249,9 @@ struct MeetingDetailView: View {
         // Benutzer haette bis dahin in ein totes Feld getippt.
         .onChange(of: transcriptQuery) { editingTurn = nil }
         .onChange(of: revision?.id) { editingTurn = nil }
+        .onChange(of: model.isRecording) {
+            observationState.restartAfterManualProcessingRequest()
+        }
         // Citation buttons in the minutes post this; scroll the cited turn
         // into view and let the highlight decay below.
         .onReceive(
@@ -1119,6 +1126,40 @@ struct MeetingDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private var shortRecordingBanner: some View {
+        if let decision = shortRecording, dismissedShortRecording != decision.job.id,
+           !model.isRecording, !model.isStartingRecording {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("That was a short recording.").font(.headline)
+                Text("Your audio is saved. Would you like to transcribe it anyway?")
+                HStack {
+                    Button("Transcribe") {
+                        isConfirmingShortRecording = true
+                        Task {
+                            _ = await model.transcribeShortRecording(decision)
+                            shortRecording = await model.shortRecordingDecision(for: meetingID)
+                            isConfirmingShortRecording = false
+                            observationState.restartAfterManualProcessingRequest()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if decision.continuesExistingMeeting {
+                        Button("Later") { dismissedShortRecording = decision.job.id }
+                    } else {
+                        Button("Move to Trash") {
+                            Task { await model.deleteMeetings([meetingID]) }
+                        }
+                    }
+                }
+                .disabled(isConfirmingShortRecording || model.isMovingMeetingsToTrash)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial)
+        }
+    }
+
     /// Aktualisiert Transkript und Jobstatus, solange die Ansicht sichtbar
     /// ist; endet, sobald kein Job mehr offen ist und ein Transkript da ist.
     private func refreshLoop() async {
@@ -1130,6 +1171,7 @@ struct MeetingDetailView: View {
             jobs = await model.jobs(for: meetingID)
             review = await model.loadReviewData(meetingID: meetingID, revision: revision)
             meeting = await model.meeting(meetingID)
+            shortRecording = await model.shortRecordingDecision(for: meetingID)
             updateTransferDetail(
                 await model.loadMeetingTransferDetail(meetingID: meetingID)
             )

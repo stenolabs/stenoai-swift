@@ -409,6 +409,7 @@ final class AppModel {
     var recordingContinuesExistingMeeting: Bool {
         recordingTemplateChoice.continuesExistingMeeting
     }
+    @ObservationIgnored var shortRecordingReadFailures: Set<MeetingID> = []
     private var liveTranscriptFeed = LiveTranscriptFeed()
     private(set) var liveTranscriptRows: [LiveTranscriptFeed.Row] = []
     private(set) var levels: [AudioTrack: AudioLevels] = [:]
@@ -2709,10 +2710,16 @@ final class AppModel {
         guard let runtime, let session, let meetingID = recordingMeetingID else { return }
         let tasks = liveTasks.takeForStop()
         var stopFailed = false
+        var shortRecordingDuration: TimeInterval?
         do {
             levelTask?.cancel()
             levelTask = nil
             let result = try await session.stop()
+            if result.stopReason == .requested,
+               let newDuration = result.assets.values.compactMap(\.duration).max(),
+               ShortRecordingDecision.requiresConfirmation(duration: newDuration) {
+                shortRecordingDuration = newDuration
+            }
             if result.stopReason != .requested,
                let error = await session.lastError() {
                 report(verbatim: error.localizedDescription)
@@ -2732,7 +2739,7 @@ final class AppModel {
                     outputs.append(output)
                 }
             }
-            if outputs.contains(where: { !$0.blocks.isEmpty }) {
+            if shortRecordingDuration == nil, outputs.contains(where: { !$0.blocks.isEmpty }) {
                 let revision = TranscriptMapper.revision(
                     from: outputs,
                     meetingID: meetingID,
@@ -2797,7 +2804,13 @@ final class AppModel {
                         meetingID: meetingID,
                         importGenerationID: meeting.processingGenerationID
                     )
-                try await runtime.jobStore.enqueue(job)
+                let decisionStore = ShortRecordingDecisionStore(layout: runtime.library.layout)
+                guard try await decisionStore.schedule(
+                    job,
+                    duration: !stopFailed && kind == .finalASR ? shortRecordingDuration : nil,
+                    continuesExistingMeeting: recordingContinuesExistingMeeting,
+                    jobStore: runtime.jobStore
+                ) else { continue }
                 try CaptureRecovery.completeFinalization(layout: runtime.library.layout, meetingID: meetingID)
                 noteJobEnqueued(for: meetingID)
             } catch {

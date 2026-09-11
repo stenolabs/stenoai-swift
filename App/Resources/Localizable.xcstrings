@@ -11712,6 +11712,102 @@
           }
         }
       }
+    },
+    "That was a short recording.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das war eine kurze Aufnahme."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這段錄音很短。"
+          }
+        }
+      }
+    },
+    "Your audio is saved. Would you like to transcribe it anyway?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Aufnahme ist gespeichert. Möchtest du sie trotzdem transkribieren?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音訊已儲存。仍要轉錄嗎？"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Später"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "稍後"
+          }
+        }
+      }
+    },
+    "Transcribe": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribieren"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轉錄"
+          }
+        }
+      }
+    },
+    "The saved recording decision could not be read.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die ausstehende Aufnahmeentscheidung konnte nicht gelesen werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取待處理的錄音決定。"
+          }
+        }
+      }
+    },
+    "The recording decision changed. Please reopen the meeting.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahmeentscheidung hat sich geändert. Bitte öffne das Meeting erneut."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音決定已變更。請重新開啟會議。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
