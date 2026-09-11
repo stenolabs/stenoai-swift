@@ -62,6 +62,7 @@ struct StenoApp: App {
         // Drei Spalten: Seitenleiste, Transkript, Inspector. Bei 980 pt
         // blieben dem Transkript keine 500 pt.
         .defaultSize(width: 1240, height: 780)
+        .windowResizability(.contentMinSize)
         .commands {
             StenoCommands(
                 model: model,

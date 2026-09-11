@@ -130,7 +130,9 @@ struct MeetingDetailView: View {
         }
         .navigationTitle(meeting?.title ?? "")
         .navigationSubtitle(subtitle)
+        .frame(minWidth: 560)
         .inspector(isPresented: $showInspector) { inspectorContent }
+        .preference(key: MainDetailMinimumWidthKey.self, value: showInspector ? 560 + 300 + 1 : 560)
         .toolbar(id: MacToolbarID.meetingDetail.rawValue) {
             ToolbarItem(
                 id: MacToolbarItemID.findTranscript.rawValue,

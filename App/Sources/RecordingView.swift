@@ -54,6 +54,8 @@ struct RecordingView: View {
         }
         // Mitschreiben waehrend der Aufnahme ist der Hauptfall fuer Notizen,
         // nicht die Ausnahme.
+        .frame(minWidth: 560)
+        .preference(key: MainDetailMinimumWidthKey.self, value: showNotes ? 560 + 260 + 1 : 560)
         .inspector(isPresented: $showNotes) {
             Group {
                 if let meetingID = model.recordingMeetingID {

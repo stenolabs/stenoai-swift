@@ -7,7 +7,18 @@ enum MacWindowPresentation {
     static let meetingsTitle: LocalizedStringResource = "Meetings"
 }
 
+/// Carries horizontal requirements across WindowStableDetail without exposing
+/// the scrollable content's ideal height to the window.
+struct MainDetailMinimumWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 560
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct ContentView: View {
+    @State private var detailMinimumWidth: CGFloat = 560
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.undoManager) private var undoManager
@@ -23,7 +34,8 @@ struct ContentView: View {
             }
             .navigationSplitViewColumnWidth(
                 min: 220,
-                ideal: Steno.Layout.sidebarIdealWidth
+                ideal: Steno.Layout.sidebarIdealWidth,
+                max: 320
             )
         } detail: {
             WindowStableDetail {
@@ -39,7 +51,9 @@ struct ContentView: View {
                     detailContent
                 }
             }
+            .frame(minWidth: detailMinimumWidth)
         }
+        .onPreferenceChange(MainDetailMinimumWidthKey.self) { detailMinimumWidth = $0 }
         .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
             if window != nil { model.registerTrashUndo(with: undoManager) }
         }

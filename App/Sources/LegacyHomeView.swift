@@ -44,28 +44,45 @@ struct LegacyHomeView: View {
     }
 
     private var hero: some View {
-        HStack(alignment: .top, spacing: Steno.Space.xl) {
-            VStack(alignment: .leading, spacing: Steno.Space.s) {
-                greeting
-                    .font(Steno.Typography.homeTitle)
-                    .foregroundStyle(Steno.Surfaces.ink(colorScheme))
-                Text("Ready when you are.")
-                    .font(.title3)
-                    .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: Steno.Space.xl) {
+                introduction.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: Steno.Space.l)
+                preparation(alignment: .trailing)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: Steno.Space.l)
-            VStack(alignment: .trailing, spacing: Steno.Space.m) {
-                Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
-                    .font(.callout)
-                    .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
-                HStack {
-                    Button("New note") {
-                        Task { await model.createDraftMeeting() }
-                    }
-                    .disabled(!StenoCommandState(model: model).canCreateMeeting)
-                    newNoteButton
+            VStack(alignment: .leading, spacing: Steno.Space.l) {
+                introduction
+                preparation(alignment: .leading)
+            }
+        }
+    }
+
+    private var introduction: some View {
+        VStack(alignment: .leading, spacing: Steno.Space.s) {
+            greeting
+                .font(Steno.Typography.homeTitle)
+                .foregroundStyle(Steno.Surfaces.ink(colorScheme))
+            Text("Ready when you are.")
+                .font(.title3)
+                .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func preparation(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: Steno.Space.m) {
+            Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
+                .font(.callout)
+                .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
+            HStack {
+                Button("New note") {
+                    Task { await model.createDraftMeeting() }
                 }
+                .disabled(!StenoCommandState(model: model).canCreateMeeting)
+                newNoteButton
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
