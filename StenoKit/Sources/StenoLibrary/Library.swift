@@ -602,7 +602,11 @@ public actor Library {
             guard FileManager.default.fileExists(atPath: directory.path) else {
                 throw LibraryError.meetingNotFound(meetingID)
             }
+            #if os(iOS)
+            trashedURL = try LibraryTrashStore(layout: layout).move(meetingID) as NSURL
+            #else
             try FileManager.default.trashItem(at: directory, resultingItemURL: &trashedURL)
+            #endif
         }
         return trashedURL as URL?
     }
@@ -625,10 +629,14 @@ public actor Library {
         ).volumeIdentifier.map(String.init(describing:))
         var destination: NSURL?
         do {
+            #if os(iOS)
+            destination = try LibraryTrashStore(layout: layout).move(meetingID) as NSURL
+            #else
             try FileManager.default.trashItem(
                 at: source,
                 resultingItemURL: &destination
             )
+            #endif
             try meetingMutationAction(
                 .afterMeetingTrashMove(meetingID),
                 transaction

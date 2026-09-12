@@ -21,6 +21,7 @@ struct MeetingDetailView: View {
     let router: NavigationRouter
     var showAudioReadiness: () -> Void = {}
 
+    @State private var showBrief = false
     @State private var revision: TranscriptRevision?
     @State private var speakerPresentationContext = SpeakerPresentationContext.empty
     @State private var duration: TimeInterval?
@@ -63,6 +64,10 @@ struct MeetingDetailView: View {
         @Bindable var router = router
 
         actionPresentationContent
+        .sheet(isPresented: $showBrief) { MeetingBriefView(meetingID: meetingID) }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ShortRecordingBanner(meetingID: meetingID)
+        }
         .inspector(isPresented: $router.isInspectorPresented) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -103,6 +108,8 @@ struct MeetingDetailView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Prepare brief…", systemImage: "sparkles") { showBrief = true }
+                            .disabled(app.recording.isActive)
                         if let subtitle {
                             Text(subtitle)
                                 .font(.caption)
@@ -1038,7 +1045,7 @@ enum MeetingActionCopy {
     )
     static let deletionMessage = LocalizedStringResource(
         "meeting.deletion.message",
-        defaultValue: "The entire meeting folder, including its original recording, transcript revisions, notes, and reports, moves to the system Trash. Steno has no in-app restore."
+        defaultValue: "The entire meeting folder, including its original recording, transcript revisions, notes, and reports, moves to the system Trash. Use Undo to restore it while Steno remains open, if the system provides a recoverable Trash location."
     )
     static let deletionConfirmationLabel: LocalizedStringResource = "Move to Trash"
     static let retranscriptionFailureTitle: LocalizedStringResource =

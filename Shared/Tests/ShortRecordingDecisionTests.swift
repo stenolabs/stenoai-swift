@@ -2,7 +2,11 @@ import Foundation
 import StenoDomain
 import StenoLibrary
 import Testing
+#if os(iOS)
+@testable import Steno
+#else
 @testable import steno_macos
+#endif
 
 @Suite("Short recording decisions")
 struct ShortRecordingDecisionTests {

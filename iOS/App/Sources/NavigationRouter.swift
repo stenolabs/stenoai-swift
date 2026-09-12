@@ -9,7 +9,7 @@ import StenoDomain
 @MainActor
 @Observable
 final class NavigationRouter {
-    var selection: SidebarItem? = .recording
+    var selection: SidebarItem? = .home
     var isInspectorPresented = false
     var meetingActionAlert: MeetingActionAlert?
     private(set) var transcriptSearchFocusRequest: UInt64 = 0

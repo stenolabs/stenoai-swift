@@ -56,6 +56,9 @@ struct RecordingView: View {
 
     private var recordingContent: some View {
         VStack(spacing: 0) {
+            if let meetingID = model.meetingID {
+                ShortRecordingBanner(meetingID: meetingID)
+            }
             header
             transcript
             footer

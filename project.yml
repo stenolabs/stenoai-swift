@@ -108,6 +108,7 @@ targets:
     platform: macOS
     sources:
       - App/Tests
+      - Shared/Tests
     dependencies:
       - target: Steno
       - package: GemmaIPC

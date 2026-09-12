@@ -1216,6 +1216,79 @@ final class AppModel {
         }
     }
 
+    struct TrashUndoReceipt: Identifiable {
+        let id = UUID()
+        let meetingID: MeetingID
+        let title: String
+        let trashedURL: URL
+        let runtimeGeneration: UInt64
+        let libraryRoot: URL
+        let processingGenerationID: MeetingTransferGenerationID?
+    }
+
+    private(set) var trashUndoReceipts: [TrashUndoReceipt] = []
+
+    var pendingTrashUndo: TrashUndoReceipt? {
+        trashUndoReceipts.last { $0.runtimeGeneration == runtimeGeneration && $0.libraryRoot == runtime?.library.layout.root }
+    }
+
+    func restoreLastTrashedMeeting() async throws -> MeetingID? {
+        guard let receipt = pendingTrashUndo else { return nil }
+        return try await restoreTrashedMeeting(receipt)
+    }
+
+    func recentlyDeletedMeetings() async throws -> LibraryTrashStore.Listing {
+        guard let snapshot = runtimeSnapshot() else { throw MeetingDeletionError.runtimeUnavailable }
+        let listing = try LibraryTrashStore(layout: snapshot.runtime.library.layout).list()
+        guard isCurrent(snapshot) else { throw MeetingDeletionError.operationInvalidated }
+        return listing
+    }
+
+    func restoreDeletedMeeting(_ entry: LibraryTrashStore.Entry) async throws -> MeetingID {
+        guard let snapshot = runtimeSnapshot() else { throw MeetingDeletionError.runtimeUnavailable }
+        let current = try LibraryTrashStore(layout: snapshot.runtime.library.layout).entries()
+        guard let stored = current.first(where: { $0.id == entry.id }),
+              stored.directory == entry.directory,
+              stored.meeting.processingGenerationID == entry.meeting.processingGenerationID else {
+            throw MeetingDeletionError.operationInvalidated
+        }
+        return try await restoreTrashedMeeting(TrashUndoReceipt(
+            meetingID: stored.meeting.id, title: stored.meeting.title, trashedURL: stored.directory,
+            runtimeGeneration: snapshot.generation, libraryRoot: snapshot.runtime.library.layout.root,
+            processingGenerationID: stored.meeting.processingGenerationID
+        ))
+    }
+
+    private func restoreTrashedMeeting(_ receipt: TrashUndoReceipt) async throws -> MeetingID {
+        guard let operation = beginLibraryOperation() else {
+            throw MeetingDeletionError.operationInProgress
+        }
+        defer { endFolderOperation(operation) }
+        guard let snapshot = runtimeSnapshot(), snapshot.generation == receipt.runtimeGeneration else {
+            throw MeetingDeletionError.operationInvalidated
+        }
+        let layout = snapshot.runtime.library.layout
+        try LibraryMutationCoordination.withExclusiveAccess(layout: layout) {
+            let destination = layout.meetingDirectory(receipt.meetingID)
+            guard !FileManager.default.fileExists(atPath: destination.path) else {
+                throw CocoaError(.fileWriteFileExists)
+            }
+            let encoded = try Data(contentsOf: receipt.trashedURL.appendingPathComponent("meeting.json"))
+            let original = try JSONDecoder().decode(Meeting.self, from: encoded)
+            guard original.schemaVersion == Meeting.currentSchemaVersion,
+                  original.id == receipt.meetingID,
+                  original.processingGenerationID == receipt.processingGenerationID else {
+                throw MeetingDeletionError.operationInvalidated
+            }
+            try FileManager.default.moveItem(at: receipt.trashedURL, to: destination)
+        }
+        trashUndoReceipts.removeAll { $0.trashedURL == receipt.trashedURL }
+        removedMeetingIDs.remove(receipt.meetingID)
+        notesSessions?.completeMeetingRestoration(receipt.meetingID)
+        _ = await reloadMeetings(for: snapshot, operation: operation)
+        return receipt.meetingID
+    }
+
     func deleteMeeting(_ meetingID: MeetingID) async throws -> MeetingDeletionOutcome {
         guard bootstrapTask == nil, let notesSessions else {
             throw MeetingDeletionError.runtimeUnavailable
@@ -1234,6 +1307,7 @@ final class AppModel {
             recordingMeetingID: recording.meetingID
         )
 
+        let deletedMeeting = try await snapshot.runtime.library.loadMeeting(meetingID)
         do {
             try await notesSessions.prepareForMeetingRemoval(meetingID)
             let jobs = try await snapshot.runtime.jobStore.list().filter {
@@ -1250,7 +1324,13 @@ final class AppModel {
             guard isCurrent(snapshot, operation: operation) else {
                 throw MeetingDeletionError.operationInvalidated
             }
-            _ = try await meetingTrasher(snapshot.runtime.library, meetingID)
+            if let trashedURL = try await meetingTrasher(snapshot.runtime.library, meetingID) {
+                trashUndoReceipts.append(TrashUndoReceipt(
+                    meetingID: meetingID, title: deletedMeeting.title, trashedURL: trashedURL,
+                    runtimeGeneration: snapshot.generation, libraryRoot: snapshot.runtime.library.layout.root,
+                    processingGenerationID: deletedMeeting.processingGenerationID
+                ))
+            }
         } catch {
             notesSessions.cancelMeetingRemoval(meetingID)
             throw error
@@ -1854,14 +1934,15 @@ final class AppModel {
         }
     }
 
-    /// Longest original track of the meeting. Microphone and system run in
-    /// parallel, so the maximum rather than the sum.
+    /// End of the recording timeline, including appended recording segments.
+    /// Concurrent microphone and system tracks do not add to each other.
     func duration(for meetingID: MeetingID) async -> TimeInterval? {
         guard let runtime else { return nil }
         let assets = (try? await runtime.library.listMediaAssets(
             meetingID: meetingID
         )) ?? []
-        return assets.map(\.duration).max()
+        guard !assets.isEmpty else { return nil }
+        return AppendedTimeline.timelineEnd(of: assets)
     }
 
     /// Where the library sits, for the diagnostics screen and for pointing the

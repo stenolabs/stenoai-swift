@@ -10,13 +10,10 @@ struct ContentView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var meetingTransferSceneID = MeetingTransferSceneID()
+    @State private var restoreFailure: String?
     @State private var sidebarRevealEvents = IOSSidebarRevealEventState()
 
-    /// Starts on the recording screen, and says so in the sidebar.
-    ///
-    /// A `nil` selection also lands on recording, so leaving it nil showed the
-    /// recording screen on iPad while no sidebar row looked selected. The app's
-    /// first purpose is to record; the selection just has to agree with that.
+    /// Each window starts on Home with an explicit matching sidebar selection.
     @State private var router = NavigationRouter()
 
     /// Explicit rather than left to `NavigationSplitView`'s own default: once
@@ -35,6 +32,28 @@ struct ContentView: View {
             startupBanners
             splitView
         }
+        .safeAreaInset(edge: .bottom) {
+            if let receipt = model.pendingTrashUndo {
+                HStack {
+                    Text("Moved to Trash").lineLimit(1)
+                    Spacer()
+                    Button("Undo") {
+                        Task {
+                            do {
+                                if let id = try await model.restoreLastTrashedMeeting() { router.select(.meeting(id)) }
+                            } catch { restoreFailure = String(localized: "The meeting could not be restored.") }
+                        }
+                    }
+                    .disabled(model.libraryActionIsInFlight)
+                    .accessibilityHint(receipt.title)
+                }
+                .padding()
+                .background(.bar)
+            }
+        }
+        .alert("Restore meeting", isPresented: Binding(get: { restoreFailure != nil }, set: { if !$0 { restoreFailure = nil } })) {
+            Button("OK") { restoreFailure = nil }
+        } message: { Text(restoreFailure ?? "") }
         .animation(.default, value: model.recording.isActive)
         .focusedSceneValue(router)
         .alert(
@@ -191,6 +210,10 @@ struct ContentView: View {
     @ViewBuilder
     private var selectedDetail: some View {
         switch router.selection?.detailRoute {
+            case .chat:
+                LibraryChatView()
+            case .home:
+                HomeView(router: router)
             case .meeting(let id):
                 if model.meetings.contains(where: { $0.id == id }) {
                     MeetingDetailView(
@@ -260,6 +283,8 @@ struct IOSStartupFailedView: View {
 /// the same selection keeps both widths on one mechanism.
 enum SidebarItem: Hashable {
     case meeting(MeetingID)
+    case chat
+    case home
     case recording
     case readiness
     case languageModels
@@ -270,6 +295,10 @@ enum SidebarItem: Hashable {
         switch self {
         case .meeting(let meetingID):
             .meeting(meetingID)
+        case .chat:
+            .chat
+        case .home:
+            .home
         case .recording:
             .recording
         case .readiness:
@@ -302,6 +331,8 @@ enum SidebarItem: Hashable {
 
 enum SidebarDetailRoute: Equatable {
     case meeting(MeetingID)
+    case chat
+    case home
     case recording
     case readiness
     case languageModels

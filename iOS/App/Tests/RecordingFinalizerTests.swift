@@ -8,6 +8,23 @@ import Testing
 
 @Suite("iOS recording finalization")
 struct RecordingFinalizerTests {
+    @Test("short recordings persist confirmation without a processing job", arguments: [3.0, 5.0, 10.0, 14.999, 15.0])
+    func shortRecordingConfirmation(duration: TimeInterval) async throws {
+        try await withFixture { library, store, meeting in
+            try await RecordingFinalizer().finalize(
+                meeting: meeting, output: nil, recordedDuration: duration,
+                library: library, jobStore: store
+            )
+            let decision = try ShortRecordingDecisionStore(layout: library.layout).load(meeting.id)
+            #expect((decision != nil) == (duration < 15))
+            #expect(try await store.list().count == (duration < 15 ? 0 : 1))
+            if let decision {
+                #expect(decision.job.localeIdentifier == Job.finalASR(for: meeting).localeIdentifier)
+                #expect(decision.job.processingGenerationID == meeting.processingGenerationID)
+            }
+        }
+    }
+
     @Test("post-recording editor joins the recording notes session")
     @MainActor
     func postRecordingEditorJoinsRecordingSession() async throws {
@@ -26,6 +43,23 @@ struct RecordingFinalizerTests {
 
             #expect(editorSession.text == "Gemeinsamer Stand")
             #expect(model.notes == editorSession.text)
+        }
+    }
+
+    @Test("a short recording does not publish provisional live text before confirmation")
+    func defersShortLiveOutput() async throws {
+        try await withFixture { library, store, meeting in
+            let output = TranscriptOutput(localeIdentifier: "de-DE", blocks: [
+                TranscriptionBlock(channel: .microphone, text: "Synthetic live text",
+                                   start: 0, end: 3, words: [])
+            ])
+            try await RecordingFinalizer().finalize(
+                meeting: meeting, output: output, recordedDuration: 3,
+                library: library, jobStore: store
+            )
+            #expect(!FileManager.default.fileExists(atPath: library.layout.currentRevision(meeting.id).path))
+            #expect(try await store.list().isEmpty)
+            #expect(try ShortRecordingDecisionStore(layout: library.layout).load(meeting.id) != nil)
         }
     }
 

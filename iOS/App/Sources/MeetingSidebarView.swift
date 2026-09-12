@@ -1,5 +1,6 @@
 import Foundation
 import StenoDomain
+import StenoLibrary
 import SwiftUI
 
 /// Persistiert ausschließlich bewusste Disclosure-Aktionen.
@@ -93,6 +94,11 @@ struct MeetingSidebarView: View {
     let onRevealApplied: (IOSSidebarRevealRequest, SidebarItem) -> Void
 
     @State private var query = ""
+    @State private var searchAllContent = true
+    @State private var contentHits: [MeetingContentGroup] = []
+    @State private var searchFailure = false
+    @State private var searchingContent = false
+    @State private var showsRecentlyDeleted = false
     @State private var persistedExpandedFolderIDs = IOSFolderDisclosureStore().load()
     @State private var folderNameOperation: FolderNameOperation?
     @State private var folderName = ""
@@ -108,10 +114,24 @@ struct MeetingSidebarView: View {
 
     var body: some View {
         actionPresentationContent
+            .sheet(isPresented: $showsRecentlyDeleted) {
+                RecentlyDeletedView { id in router.select(.meeting(id)) }
+            }
     }
 
     private var navigationContent: some View {
         List(selection: $selection) {
+            Section {
+                NavigationLink(value: SidebarItem.home) {
+                    Label("Home", systemImage: "house")
+                }
+                NavigationLink(value: SidebarItem.chat) {
+                    Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                }
+                Button { showsRecentlyDeleted = true } label: {
+                    Label("Recently deleted", systemImage: "trash")
+                }
+            }
             if !model.libraryIssues.isEmpty {
                 Section("Library") {
                     ForEach(model.libraryIssues) { issue in
@@ -142,31 +162,52 @@ struct MeetingSidebarView: View {
                 }
             }
 
-            Section {
-                foldersHeading
-                ForEach(presentation.tree.folderNodes) { node in
-                    rootFolder(node)
-                }
-            }
-
-            if presentation.tree.folderNodes.isEmpty,
-               presentation.tree.unfiledSections.isEmpty
-            {
-                Section {
-                    Text(emptyMeetingMessage)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .selectionDisabled()
-                }
-            }
-
-            ForEach(presentation.tree.unfiledSections) { section in
-                Section {
-                    ForEach(section.meetings, id: \.id) { meeting in
-                        meetingRow(meeting)
+            if isSearching && searchAllContent && !searchFailure {
+                Section("Search results") {
+                    if searchingContent { ProgressView() }
+                    ForEach(contentHits.filter { hit in model.meetings.contains { $0.id == hit.meetingID } }, id: \.meetingID) { hit in
+                        if let meeting = model.meetings.first(where: { $0.id == hit.meetingID }) {
+                            NavigationLink(value: SidebarItem.meeting(meeting.id)) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(meeting.title).font(.headline)
+                                    if let snippet = hit.hits.first?.snippet {
+                                        Text(snippet).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                                    }
+                                }
+                            }
+                        }
                     }
-                } header: {
-                    unfiledSectionHeader(section)
+                    if !searchingContent && contentHits.isEmpty {
+                        Text("No results").foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Section {
+                    foldersHeading
+                    ForEach(presentation.tree.folderNodes) { node in
+                        rootFolder(node)
+                    }
+                }
+
+                if presentation.tree.folderNodes.isEmpty,
+                   presentation.tree.unfiledSections.isEmpty
+                {
+                    Section {
+                        Text(emptyMeetingMessage)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .selectionDisabled()
+                    }
+                }
+
+                ForEach(presentation.tree.unfiledSections) { section in
+                    Section {
+                        ForEach(section.meetings, id: \.id) { meeting in
+                            meetingRow(meeting)
+                        }
+                    } header: {
+                        unfiledSectionHeader(section)
+                    }
                 }
             }
 
@@ -190,7 +231,47 @@ struct MeetingSidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Steno")
-        .searchable(text: $query, prompt: "Search titles")
+        .searchable(text: $query, prompt: searchAllContent ? "Search All Content" : "Search Titles")
+        .safeAreaInset(edge: .top) {
+            if isSearching {
+                VStack {
+                    Picker("Search scope", selection: $searchAllContent) {
+                        Text("Titles").tag(false)
+                        Text("All Content").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    if searchFailure {
+                        Text("Content search is unavailable. Showing title matches.").font(.caption)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        .task(id: IOSContentSearchRequest(query: query, allContent: searchAllContent,
+                                          runtimeGeneration: model.runtimeSnapshot()?.generation,
+                                          meetings: model.meetings)) {
+            contentHits = []
+            searchFailure = false
+            guard isSearching, searchAllContent else { searchingContent = false; return }
+            searchingContent = true
+            do {
+                try await Task.sleep(for: .milliseconds(200))
+                let groups = try await model.searchMeetingContents(query)
+                try Task.checkCancellation()
+                let titleMatches = MeetingSearch.matching(model.meetings, query: query)
+                let indexedIDs = Set(groups.map(\.meetingID))
+                contentHits = titleMatches.filter { !indexedIDs.contains($0.id) }.map {
+                    MeetingContentGroup(meetingID: $0.id, hits: [])
+                } + groups
+                searchingContent = false
+            } catch is CancellationError {
+                if !Task.isCancelled { searchingContent = false }
+            } catch {
+                guard !Task.isCancelled else { return }
+                searchFailure = true
+                searchingContent = false
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 newMeetingButton
@@ -885,4 +966,11 @@ extension FolderColorToken {
         case .teal: .teal
         }
     }
+}
+
+private struct IOSContentSearchRequest: Equatable {
+    let query: String
+    let allContent: Bool
+    let runtimeGeneration: UInt64?
+    let meetings: [Meeting]
 }

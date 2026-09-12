@@ -75,6 +75,13 @@ public final class MeetingNotesSessionPool {
         sessions[meetingID] = nil
     }
 
+    /// A successful restore permits a fresh editor without reactivating any
+    /// editor that still holds the removed session.
+    public func completeMeetingRestoration(_ meetingID: MeetingID) {
+        guard removalStates[meetingID] == .completed else { return }
+        removalStates[meetingID] = nil
+    }
+
     private enum RemovalState: Equatable {
         case preparing
         case completed

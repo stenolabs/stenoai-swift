@@ -149,7 +149,7 @@ struct StenoCommandStateTests {
 
         #expect(first.selection == .meeting(draft.meetingID))
         #expect(!first.isInspectorPresented)
-        #expect(second.selection == .recording)
+        #expect(second.selection == .home)
         #expect(!second.isInspectorPresented)
         #expect(focusedRouter === second)
     }

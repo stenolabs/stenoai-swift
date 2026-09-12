@@ -13,7 +13,7 @@ struct NavigationRouterTests {
         first.selection = .languageModels
 
         #expect(first.selection == .languageModels)
-        #expect(second.selection == .recording)
+        #expect(second.selection == .home)
     }
 
     @Test("routers do not share selection or inspector state")

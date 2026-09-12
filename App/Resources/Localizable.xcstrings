@@ -11876,6 +11876,214 @@
           }
         }
       }
+    },
+    "Type a question first.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib zuerst eine Frage ein."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先輸入問題。"
+          }
+        }
+      }
+    },
+    "The message exceeds the maximum length of %lld characters.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nachricht überschreitet die maximale Länge von %lld Zeichen."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訊息超過 %lld 個字元的長度上限。"
+          }
+        }
+      }
+    },
+    "There are no meeting reports or notes yet to ask about.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es gibt noch keine Meeting-Protokolle oder Notizen, zu denen du Fragen stellen kannst."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前還沒有可供提問的會議紀錄或筆記。"
+          }
+        }
+      }
+    },
+    "The message could not be prepared.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nachricht konnte nicht vorbereitet werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法準備訊息。"
+          }
+        }
+      }
+    },
+    "Live queries do not support the %@ endpoint dialect.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Fragen unterstützen das Endpunktformat %@ nicht."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即時查詢不支援 %@ 端點格式。"
+          }
+        }
+      }
+    },
+    "This text-model endpoint requires an API key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Textmodell-Endpunkt benötigt einen API-Schlüssel."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文字模型端點需要 API 金鑰。"
+          }
+        }
+      }
+    },
+    "The text-model endpoint tried to redirect the request. Steno blocks redirects to protect your data.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Textmodell-Endpunkt hat versucht, die Anfrage umzuleiten. Steno blockiert Weiterleitungen zum Schutz deiner Daten."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字模型端點嘗試重新導向請求。Steno 會封鎖重新導向以保護你的資料。"
+          }
+        }
+      }
+    },
+    "The text-model endpoint responded with HTTP %lld.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Textmodell-Endpunkt hat mit HTTP %lld geantwortet."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字模型端點回傳 HTTP %lld。"
+          }
+        }
+      }
+    },
+    "The text-model endpoint did not return a usable answer.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Textmodell-Endpunkt hat keine verwendbare Antwort geliefert."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字模型端點未傳回可用的答案。"
+          }
+        }
+      }
+    },
+    "The answer exceeded the live-query size limit.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort hat die Größenbegrenzung für Live-Fragen überschritten."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "答案超過即時查詢的大小上限。"
+          }
+        }
+      }
+    },
+    "The model could not answer right now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Modell konnte gerade nicht antworten."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型目前無法回答。"
+          }
+        }
+      }
+    },
+    "No related notes yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine passenden Notizen"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚無相關筆記"
+          }
+        }
+      }
+    },
+    "The pre-meeting brief could not be generated.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Meeting-Vorbereitung konnte nicht erstellt werden."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法產生會議準備摘要。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
