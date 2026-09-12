@@ -88,50 +88,58 @@ struct MeetingDetailView: View {
     @State private var citedTurnIndex: Int?
 
     var body: some View {
-        Group {
-            if let revision, !revision.turns.isEmpty {
-                transcriptList(revision)
-            } else {
-                ContentUnavailableView(
-                    meeting?.status == .draft ? "Draft" : "No transcript yet",
-                    systemImage: meeting?.status == .draft
-                        ? "square.and.pencil"
-                        : "text.quote",
-                    description: Text(pendingDescription)
-                )
-            }
-        }
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                meetingActionBar
-                if meeting?.isDemo == true {
-                    HStack {
-                        DemoBadge()
-                        Spacer()
-                    }
-                    .padding(.horizontal, Steno.Space.m)
-                    .padding(.vertical, Steno.Space.xs)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background)
-                    Divider()
+        HStack(spacing: 0) {
+            Group {
+                if let revision, !revision.turns.isEmpty {
+                    transcriptList(revision)
+                } else {
+                    ContentUnavailableView(
+                        meeting?.status == .draft ? "Draft" : "No transcript yet",
+                        systemImage: meeting?.status == .draft
+                            ? "square.and.pencil"
+                            : "text.quote",
+                        description: Text(pendingDescription)
+                    )
                 }
-                meetingTransferTopStatus
-                shortRecordingBanner
-                pendingBanner
-                legacyUpgradeTopStatus
-                jobStatusBar
-                findBar
             }
-            .animation(statusAnimation, value: pipelineStatus.state)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let meeting, meeting.status != .recording {
-                meetingAskDock
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top) {
+                VStack(spacing: 0) {
+                    meetingActionBar
+                    if meeting?.isDemo == true {
+                        HStack {
+                            DemoBadge()
+                            Spacer()
+                        }
+                        .padding(.horizontal, Steno.Space.m)
+                        .padding(.vertical, Steno.Space.xs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background)
+                        Divider()
+                    }
+                    meetingTransferTopStatus
+                    shortRecordingBanner
+                    pendingBanner
+                    legacyUpgradeTopStatus
+                    jobStatusBar
+                    findBar
+                }
+                .animation(statusAnimation, value: pipelineStatus.state)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let meeting, meeting.status != .recording {
+                    meetingAskDock
+                }
+            }
+
+            if showInspector {
+                Divider()
+                inspectorContent
+                    .frame(width: 360)
             }
         }
         .navigationTitle(meeting?.title ?? "")
         .navigationSubtitle(subtitle)
-        .inspector(isPresented: $showInspector) { inspectorContent }
         .sheet(isPresented: $showMeetingTransferExport) {
             MeetingTransferExportView(meetingID: meetingID)
                 .environment(model)
@@ -594,7 +602,6 @@ struct MeetingDetailView: View {
             .padding(Steno.Space.l)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .inspectorColumnWidth(min: 300, ideal: 360, max: 460)
     }
 
     /// Diarisierung und Anhören setzen die Originalspur voraus; ohne Audio

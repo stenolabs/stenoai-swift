@@ -92,20 +92,47 @@ struct WindowLayoutTests {
         }
     }
 
-    @Test("inspector visibility does not change the window minimum size")
-    func inspectorKeepsWindowMinimumSizeStable() {
-        let proposed = NSSize(width: 1_240, height: 780)
+    @Test("sidebar header remains visible at the minimum window size")
+    func sidebarHeaderKeepsItsHeight() throws {
+        let probe = SidebarHeaderLayoutProbe()
         let host = NSHostingView(
+            rootView: SidebarHeaderVisibilityFixture(probe: probe)
+        )
+        host.setFrameSize(NSSize(width: 980, height: 560))
+        host.layoutSubtreeIfNeeded()
+
+        let headerView = try #require(probe.view)
+        #expect(headerView.frame.height >= 119)
+    }
+
+    @Test("inspector visibility does not change the window minimum size")
+    func inspectorKeepsWindowMinimumSizeStable() async throws {
+        let proposed = NSSize(width: 1_240, height: 780)
+        let controller = NSHostingController(
             rootView: WindowRootSizingFixture(showsInspector: false)
         )
-        host.setFrameSize(proposed)
-        host.layoutSubtreeIfNeeded()
-        let closedMinimum = host.fittingSize
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: proposed),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
 
-        host.rootView = WindowRootSizingFixture(showsInspector: true)
-        host.setFrameSize(proposed)
-        host.layoutSubtreeIfNeeded()
-        let openMinimum = host.fittingSize
+        for _ in 0..<5 {
+            try await Task.sleep(for: .milliseconds(20))
+            window.layoutIfNeeded()
+        }
+        let closedMinimum = window.contentMinSize
+
+        controller.rootView = WindowRootSizingFixture(showsInspector: true)
+        for _ in 0..<5 {
+            try await Task.sleep(for: .milliseconds(20))
+            window.layoutIfNeeded()
+        }
+        let openMinimum = window.contentMinSize
 
         #expect(closedMinimum == MacWindowPresentation.minimumContentSize)
         #expect(openMinimum == closedMinimum)
@@ -222,32 +249,72 @@ private struct WindowRootSizingFixture: View {
     let showsInspector: Bool
 
     var body: some View {
-        WindowStableRoot {
-            NavigationSplitView {
-                WindowStableSidebar {
-                    Color.clear.frame(height: 80)
-                } content: {
-                    List(0..<5, id: \.self) { index in
-                        Text("Meeting \(index)")
-                    }
-                }
-                .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 320)
-            } detail: {
-                WindowStableDetail {
-                    Text("Meeting detail")
-                        .inspector(isPresented: .constant(showsInspector)) {
-                            Text("Meeting inspector")
-                                .inspectorColumnWidth(min: 300, ideal: 360, max: 460)
-                        }
+        NavigationSplitView {
+            WindowStableSidebar {
+                Color.clear.frame(height: 80)
+            } content: {
+                List(0..<5, id: \.self) { index in
+                    Text("Meeting \(index)")
                 }
             }
-            .safeAreaInset(edge: .top) { Color.clear.frame(height: 24) }
-            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 24) }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 320)
+        } detail: {
+            WindowStableDetail {
+                HStack(spacing: 0) {
+                    Text("Meeting detail")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if showsInspector {
+                        Divider()
+                        Text("Meeting inspector")
+                            .frame(width: 360)
+                    }
+                }
+            }
         }
+        .safeAreaInset(edge: .top) { Color.clear.frame(height: 24) }
+        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 24) }
         .frame(
             minWidth: MacWindowPresentation.minimumContentSize.width,
             minHeight: MacWindowPresentation.minimumContentSize.height
         )
+    }
+}
+
+@MainActor
+private final class SidebarHeaderLayoutProbe {
+    weak var view: NSView?
+}
+
+private struct SidebarHeaderProbeView: NSViewRepresentable {
+    let probe: SidebarHeaderLayoutProbe
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        probe.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+}
+
+private struct SidebarHeaderVisibilityFixture: View {
+    let probe: SidebarHeaderLayoutProbe
+
+    var body: some View {
+        NavigationSplitView {
+            WindowStableSidebar {
+                SidebarHeaderProbeView(probe: probe)
+                    .frame(height: 120)
+            } content: {
+                List(0..<40, id: \.self) { index in
+                    Text("Meeting \(index)")
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 320)
+        } detail: {
+            WindowStableDetail { Color.clear }
+        }
+        .frame(minWidth: 980, minHeight: 560)
     }
 }
 
