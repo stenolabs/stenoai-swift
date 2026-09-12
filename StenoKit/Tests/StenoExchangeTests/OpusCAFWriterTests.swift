@@ -1,11 +1,38 @@
 import AudioToolbox
 import AVFoundation
 import Foundation
+import StenoDomain
 import Testing
 @testable import StenoExchange
 
 @Suite("Opus CAF writer")
 struct OpusCAFWriterTests {
+    @Test("transfer export preserves Opus bytes and validates a compressed package")
+    func transferPreservesOpus() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appending(path: "opus.caf")
+        _ = try OpusCAFWriter.write(WebMOpusAudio(magicCookie: opusCAFCookie,
+            sampleRate: 48_000, channelCount: 2, packets: Array(repeating: Data([0xF8, 0xFF, 0xFE]), count: 100)), to: url)
+        let original = try Data(contentsOf: url)
+        let expected = try MeetingTransferAudioInspector().prepareCAFSource(at: url)
+        let export = try MeetingTransferAudioExport(root: root.appending(path: "encoding"))
+        defer { try? export.cleanup() }
+        let output = try export.prepare(sourceURL: url, expected: expected)
+        #expect(output.url == url)
+        #expect(output.source.formatID == kAudioFormatOpus)
+        #expect(try Data(contentsOf: output.url) == original)
+        let document = try MeetingTransferAudioDocument(logicalTrackID: "track-1", kind: .imported,
+            byteCount: expected.byteCount, sha256: expected.byteSHA256, sampleRate: expected.sampleRate,
+            channelCount: expected.channelCount, duration: expected.duration)
+        let content = try MeetingTransferPackageContent(meeting: makeTransferMeeting(), notes: nil, transcript: nil, audio: [document])
+        let archive = try await MeetingTransferArchiveWriter().write(content,
+            audioSources: [.init(logicalTrackID: "track-1", sourceURL: output.url)], to: root.appending(path: "export"))
+        let validated = try await MeetingTransferArchiveReader().validate(at: archive, validationRoot: root.appending(path: "validation"))
+        defer { try? validated.close() }
+        #expect(validated.audio.first?.byteSHA256 == expected.byteSHA256)
+    }
+
     @Test("repackages synthetic Opus packets into an AVFoundation-readable CAF")
     func writesReadableCAFWithoutChangingPackets() async throws {
         let directory = try makeTemporaryDirectory()

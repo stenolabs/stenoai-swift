@@ -84,6 +84,7 @@ public final class MeetingTransferAudioSourceLease: @unchecked Sendable {
 
 package struct MeetingTransferCAFInspection: Sendable {
     package let byteCount: Int64
+    package let formatID: AudioFormatID
     package let sampleRate: Double
     package let channelCount: Int
     package let duration: TimeInterval
@@ -91,6 +92,7 @@ package struct MeetingTransferCAFInspection: Sendable {
 
 package struct MeetingTransferPreparedCAFSource: Sendable {
     package let byteCount: Int64
+    package let formatID: AudioFormatID
     package let byteSHA256: String
     package let sampleRate: Double
     package let channelCount: Int
@@ -290,6 +292,7 @@ public struct MeetingTransferAudioInspector: Sendable {
         )
         return MeetingTransferCAFInspection(
             byteCount: source.byteCount,
+            formatID: values.formatID,
             sampleRate: values.sampleRate,
             channelCount: values.channelCount,
             duration: values.duration
@@ -337,6 +340,7 @@ public struct MeetingTransferAudioInspector: Sendable {
         }
         return MeetingTransferPreparedCAFSource(
             byteCount: source.byteCount,
+            formatID: values.formatID,
             byteSHA256: digest,
             sampleRate: values.sampleRate,
             channelCount: values.channelCount,
@@ -454,7 +458,7 @@ public struct MeetingTransferAudioInspector: Sendable {
     private static func inspectAudioValues(
         fileDescriptor: Int32,
         logicalTrackID: String
-    ) throws -> (sampleRate: Double, channelCount: Int, duration: TimeInterval) {
+    ) throws -> (sampleRate: Double, channelCount: Int, duration: TimeInterval, formatID: AudioFormatID) {
         var descriptorStatus = stat()
         guard fstat(fileDescriptor, &descriptorStatus) == 0,
               descriptorStatus.st_mode & S_IFMT == S_IFREG,
@@ -532,7 +536,7 @@ public struct MeetingTransferAudioInspector: Sendable {
             guard duration.isFinite, duration > 0 else {
                 throw MeetingTransferValidationError.emptyAudio(logicalTrackID)
             }
-            return (sampleRate, channelCount, duration)
+            return (sampleRate, channelCount, duration, format.mFormatID)
         }
     }
 }

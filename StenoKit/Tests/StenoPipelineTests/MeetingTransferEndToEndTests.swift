@@ -1,3 +1,4 @@
+@preconcurrency import AVFAudio
 import Foundation
 import StenoDomain
 import StenoExchange
@@ -7,6 +8,72 @@ import Testing
 
 @Suite("MeetingTransferEndToEndTests")
 struct MeetingTransferEndToEndTests {
+    @Test("compressed multitrack export imports with hashes and immutable originals")
+    func compressedMultitrackRoundTrip() async throws {
+        try await withTemporaryDirectory { root in
+            let source = try await makeTransferSource(at: root, title: "Synthetic AAC transfer",
+                includesText: true, includesAudio: false, installsPrivacySentinels: false)
+            var ids: Set<MediaAssetID> = []
+            var originals: [(URL, Data)] = []
+            for channels in [1, 2] {
+                let url = root.appending(path: "tone-\(channels).caf")
+                let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: UInt32(channels)))
+                do {
+                    let file = try AVAudioFile(forWriting: url, settings: [
+                        AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48_000,
+                        AVNumberOfChannelsKey: channels, AVLinearPCMBitDepthKey: 16,
+                        AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
+                    let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 480_013))
+                    buffer.frameLength = 480_013
+                    for channel in 0..<channels {
+                        for frame in 0..<480_013 {
+                            buffer.floatChannelData![channel][frame] = Float(sin(Double(frame) * 2 * .pi * Double(440 + 220 * channel) / 48_000)) * 0.2
+                        }
+                    }
+                    try file.write(from: buffer)
+                }
+                let asset = try await source.library.registerMediaAsset(for: source.meeting.id,
+                    sourceURL: url, kind: channels == 1 ? .micTrack : .systemTrack,
+                    sampleRate: 48_000, duration: 480_013.0 / 48_000)
+                ids.insert(asset.id)
+                let originalURL = source.library.layout.mediaFile(source.meeting.id, fileName: asset.fileName)
+                originals.append((originalURL, try Data(contentsOf: originalURL)))
+            }
+            let exported = try await MeetingTransferExportService(library: source.library).export(
+                meetingID: source.meeting.id, selectedAudioAssetIDs: ids,
+                temporaryRoot: root.appending(path: "AACExport"), sourceAppVersion: "synthetic-aac-fixture-v1")
+            for (url, bytes) in originals { #expect(try Data(contentsOf: url) == bytes) }
+            #expect(exported.totalByteCount < originals.reduce(0) { $0 + $1.1.count } / 4)
+            let target = try makeTransferTarget(at: root)
+            let service = MeetingTransferImportService(library: target.library, jobStore: target.jobStore)
+            let prepared = try await service.prepareImport(at: exported.packageURL)
+            #expect(try await service.importPrepared(sessionID: prepared.sessionID, choice: .importOnly) == .imported(source.meeting.id))
+            let imported = try await target.library.listMediaAssets(meetingID: source.meeting.id)
+            #expect(imported.count == 2)
+            #expect(Set(imported.map(\.kind)) == [.micTrack, .systemTrack])
+            for asset in imported {
+                let file = try AVAudioFile(forReading: target.library.layout.mediaFile(source.meeting.id, fileName: asset.fileName))
+                #expect(file.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatMPEG4AAC)
+                #expect(file.length == 480_013)
+                #expect(file.processingFormat.channelCount == (asset.kind == .micTrack ? 1 : 2))
+            }
+            let second = try await service.prepareImport(at: exported.packageURL)
+            #expect(second.preview.disposition == .alreadyPresent(source.meeting.id))
+            try await service.discardPrepared(sessionID: second.sessionID)
+            // Lossy derivatives cannot establish byte identity with native originals.
+            let originService = MeetingTransferImportService(library: source.library, jobStore: try JobStore(layout: source.library.layout))
+            let origin = try await originService.prepareImport(at: exported.packageURL)
+            #expect(origin.preview.disposition == .conflict(source.meeting.id))
+            try await originService.discardPrepared(sessionID: origin.sessionID)
+            if let path = ProcessInfo.processInfo.environment["STENO_AAC_FIXTURE_DIR"] {
+                let directory = URL(fileURLWithPath: path)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let destination = directory.appending(path: "synthetic-aac.stenomeeting")
+                try FileManager.default.copyItem(at: exported.packageURL, to: destination)
+            }
+        }
+    }
+
     @Test("text-only meetings round trip in both device directions without private library data")
     func textOnlyRoundTripsInBothDirections() async throws {
         try await withTemporaryDirectory { root in
