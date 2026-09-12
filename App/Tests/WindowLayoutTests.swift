@@ -91,6 +91,79 @@ struct WindowLayoutTests {
             )
         }
     }
+
+    @Test("deleting the selected meeting completes the window transition")
+    func deletingSelectedMeetingCompletesWindowTransition() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "Steno-DeleteWindowTransitionTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let libraryURL = root.appendingPathComponent("Library", isDirectory: true)
+        let modelURL = root.appendingPathComponent("Models", isDirectory: true)
+        let trashURL = root.appendingPathComponent("Trash", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: trashURL,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = AppModel(
+            meetingTrasher: { library, meetingID in
+                let source = library.layout.meetingDirectory(meetingID)
+                let destination = trashURL.appendingPathComponent(
+                    meetingID.description,
+                    isDirectory: true
+                )
+                try FileManager.default.moveItem(at: source, to: destination)
+                return destination
+            },
+            libraryURL: libraryURL,
+            modelCacheDirectoryOverride: modelURL
+        )
+        await model.bootstrap()
+        let runtime = try #require(model.runtime)
+
+        let controller = NSHostingController(
+            rootView: ContentView()
+                .environment(model)
+                .environment(TextModelSettings())
+                .environment(OperatorProfile.shared)
+                .environment(OnboardingModel())
+        )
+        let window = NSWindow(contentViewController: controller)
+        window.setContentSize(NSSize(width: 1_240, height: 780))
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+
+        for iteration in 0..<20 {
+            let meeting = try await runtime.library.createMeeting(
+                title: "Synthetic meeting \(iteration)",
+                status: .ready
+            )
+            await model.refreshMeetings()
+            model.selectedMeetingIDs = [meeting.id]
+
+            for _ in 0..<4 {
+                await Task.yield()
+                window.layoutIfNeeded()
+            }
+
+            await model.deleteMeeting(meeting.id)
+
+            for _ in 0..<8 {
+                await Task.yield()
+                window.layoutIfNeeded()
+            }
+
+            #expect(model.selectedMeetingIDs.isEmpty)
+            #expect(!model.meetings.contains(where: { $0.id == meeting.id }))
+            #expect(model.pendingTrashUndo != nil)
+        }
+
+        await model.stopBackgroundLibraryTasksForTesting()
+        await model.runtime?.coordinator.stop()
+    }
 }
 
 private struct SidebarLayoutFixture: View {

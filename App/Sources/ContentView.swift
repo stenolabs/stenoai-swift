@@ -7,18 +7,7 @@ enum MacWindowPresentation {
     static let meetingsTitle: LocalizedStringResource = "Meetings"
 }
 
-/// Carries horizontal requirements across WindowStableDetail without exposing
-/// the scrollable content's ideal height to the window.
-struct MainDetailMinimumWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 560
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
 struct ContentView: View {
-    @State private var detailMinimumWidth: CGFloat = 560
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.undoManager) private var undoManager
@@ -51,18 +40,17 @@ struct ContentView: View {
                     detailContent
                 }
             }
-            .frame(minWidth: detailMinimumWidth)
+            // Keep the window usable without feeding a child preference back
+            // into the view tree. A changing minimum width here can invalidate
+            // AppKit constraints while SwiftUI removes a detail toolbar.
+            .frame(minWidth: 560)
         }
-        .onPreferenceChange(MainDetailMinimumWidthKey.self) { detailMinimumWidth = $0 }
         .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
             if window != nil { model.registerTrashUndo(with: undoManager) }
         }
-        .toolbar(id: MacToolbarID.main.rawValue) {
+        .toolbar {
             if model.isRecording {
-                ToolbarItem(
-                    id: MacToolbarItemID.recording.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.stopRecording() }
                     } label: {
@@ -71,45 +59,18 @@ struct ContentView: View {
                     }
                     .help("Stop recording")
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .recording,
-                        in: .main
-                    )
-                )
             } else if model.isStartingRecording {
-                ToolbarItem(
-                    id: MacToolbarItemID.recording.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     ProgressView()
                         .controlSize(.small)
                         .help("Preparing recording")
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .recording,
-                        in: .main
-                    )
-                )
             } else {
-                ToolbarItem(
-                    id: MacToolbarItemID.microphoneSelection.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     MicrophoneSelectionButton()
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .microphoneSelection,
-                        in: .main
-                    )
-                )
 
-                ToolbarItem(
-                    id: MacToolbarItemID.importMeeting.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button {
                             Task { await model.createDraftMeeting() }
@@ -133,17 +94,8 @@ struct ContentView: View {
                     .help("Create a draft or import an existing recording")
                     .disabled(model.runtime == nil)
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .importMeeting,
-                        in: .main
-                    )
-                )
 
-                ToolbarItem(
-                    id: MacToolbarItemID.newMeeting.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.createDraftMeeting() }
                     } label: {
@@ -151,18 +103,9 @@ struct ContentView: View {
                     }
                     .disabled(model.runtime == nil)
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .newMeeting,
-                        in: .main
-                    )
-                )
 
                 if model.meetings.first(where: { $0.id == model.selectedMeetingID })?.status != .draft {
-                ToolbarItem(
-                    id: MacToolbarItemID.recording.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.startRecording() }
                     } label: {
@@ -172,12 +115,6 @@ struct ContentView: View {
                     .help("Start a new recording")
                     .disabled(!model.canStartRecording)
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .recording,
-                        in: .main
-                    )
-                )
                 }
             }
         }

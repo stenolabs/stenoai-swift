@@ -55,7 +55,6 @@ struct RecordingView: View {
         // Mitschreiben waehrend der Aufnahme ist der Hauptfall fuer Notizen,
         // nicht die Ausnahme.
         .frame(minWidth: 560)
-        .preference(key: MainDetailMinimumWidthKey.self, value: showNotes ? 560 + 260 + 1 : 560)
         .inspector(isPresented: $showNotes) {
             Group {
                 if let meetingID = model.recordingMeetingID {
@@ -72,22 +71,13 @@ struct RecordingView: View {
         .overlay(alignment: .bottom) {
             AskBarView(isVisible: $isAskBarVisible)
         }
-        .toolbar(id: MacToolbarID.recording.rawValue) {
-            ToolbarItem(
-                id: MacToolbarItemID.recordingNotes.rawValue,
-                placement: .primaryAction
-            ) {
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: $showNotes) {
                     Label("Notes", systemImage: "square.and.pencil")
                 }
                 .help("Take notes while recording")
             }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .recordingNotes,
-                    in: .recording
-                )
-            )
         }
     }
 

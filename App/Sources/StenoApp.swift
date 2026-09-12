@@ -74,7 +74,6 @@ struct StenoApp: App {
                     openWindow(id: "onboarding")
                 }
             )
-            ToolbarCommands()
         }
 
         Window("Import from Legacy Steno App", id: "legacy-import") {

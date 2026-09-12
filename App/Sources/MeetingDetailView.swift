@@ -132,12 +132,8 @@ struct MeetingDetailView: View {
         .navigationSubtitle(subtitle)
         .frame(minWidth: 560)
         .inspector(isPresented: $showInspector) { inspectorContent }
-        .preference(key: MainDetailMinimumWidthKey.self, value: showInspector ? 560 + 300 + 1 : 560)
-        .toolbar(id: MacToolbarID.meetingDetail.rawValue) {
-            ToolbarItem(
-                id: MacToolbarItemID.findTranscript.rawValue,
-                placement: .primaryAction
-            ) {
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     showFind = true
                     findFocused = true
@@ -147,31 +143,13 @@ struct MeetingDetailView: View {
                 .help("Find in this transcript (Cmd-F)")
                 .disabled(revision == nil)
             }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .findTranscript,
-                    in: .meetingDetail
-                )
-            )
-            ToolbarItem(
-                id: MacToolbarItemID.inspector.rawValue,
-                placement: .primaryAction
-            ) {
+            ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: $showInspector) {
                     Label("Details", systemImage: "sidebar.right")
                 }
                 .help("Show notes, participants and speaker assignment")
             }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .inspector,
-                    in: .meetingDetail
-                )
-            )
-            ToolbarItem(
-                id: MacToolbarItemID.shareMeeting.rawValue,
-                placement: .primaryAction
-            ) {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("Copy Notes") {
                         Task {
@@ -203,17 +181,8 @@ struct MeetingDetailView: View {
                 }
                 .help("Copy the notes, share them as a PDF or export the meeting")
             }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .shareMeeting,
-                    in: .meetingDetail
-                )
-            )
             if showsContinueRecording {
-                ToolbarItem(
-                    id: MacToolbarItemID.continueRecording.rawValue,
-                    placement: .primaryAction
-                ) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         showContinueRecordingConfirmation = true
                     } label: {
@@ -224,12 +193,6 @@ struct MeetingDetailView: View {
                     }
                     .help("Record additional audio into this meeting")
                 }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .continueRecording,
-                        in: .meetingDetail
-                    )
-                )
             }
         }
         .sheet(isPresented: $showMeetingTransferExport) {
