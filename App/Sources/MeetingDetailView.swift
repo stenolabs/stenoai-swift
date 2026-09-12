@@ -103,6 +103,7 @@ struct MeetingDetailView: View {
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
+                meetingActionBar
                 if meeting?.isDemo == true {
                     HStack {
                         DemoBadge()
@@ -132,69 +133,6 @@ struct MeetingDetailView: View {
         .navigationSubtitle(subtitle)
         .frame(minWidth: 560)
         .inspector(isPresented: $showInspector) { inspectorContent }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showFind = true
-                    findFocused = true
-                } label: {
-                    Label("Find in transcript", systemImage: "magnifyingglass")
-                }
-                .help("Find in this transcript (Cmd-F)")
-                .disabled(revision == nil)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Toggle(isOn: $showInspector) {
-                    Label("Details", systemImage: "sidebar.right")
-                }
-                .help("Show notes, participants and speaker assignment")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("Copy Notes") {
-                        Task {
-                            if await model.copyNotesToPasteboard(for: meetingID) != nil {
-                                showsCopyNotesFlash = true
-                            }
-                        }
-                    }
-                    .disabled(meeting == nil)
-                    Button("Share as PDF…") {
-                        Task { await model.shareNotesAsPDF(for: meetingID) }
-                    }
-                    .disabled(meeting == nil)
-                    Divider()
-                    Button("Export Meeting as Markdown…") {
-                        let action = MacFocusedAsyncAction(target: meetingID) {
-                            await model.exportMeetingToFile($0)
-                        }
-                        Task { await action() }
-                    }
-                    Button("Export to Obsidian Vault") {
-                        Task { await model.exportMeetingToObsidianVault(meetingID) }
-                    }
-                } label: {
-                    Label(
-                        "Share Notes",
-                        systemImage: showsCopyNotesFlash ? "checkmark" : "square.and.arrow.up"
-                    )
-                }
-                .help("Copy the notes, share them as a PDF or export the meeting")
-            }
-            if showsContinueRecording {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showContinueRecordingConfirmation = true
-                    } label: {
-                        Label(
-                            meeting?.status == .draft ? "Record into this note" : "Continue Recording",
-                            systemImage: meeting?.status == .draft ? "mic" : "record.circle"
-                        )
-                    }
-                    .help("Record additional audio into this meeting")
-                }
-            }
-        }
         .sheet(isPresented: $showMeetingTransferExport) {
             MeetingTransferExportView(meetingID: meetingID)
                 .environment(model)
@@ -258,6 +196,78 @@ struct MeetingDetailView: View {
                 Text("New audio is appended after the existing recordings and transcribed into the same meeting.")
             }
         }
+    }
+
+    /// Selection changes replace the detail view while AppKit may already be
+    /// laying out the titlebar. Keeping these actions in normal view layout
+    /// avoids mutating the window toolbar during that transition.
+    private var meetingActionBar: some View {
+        HStack(spacing: Steno.Space.s) {
+            Spacer()
+            Button {
+                showFind = true
+                findFocused = true
+            } label: {
+                Label("Find in transcript", systemImage: "magnifyingglass")
+            }
+            .help("Find in this transcript (Cmd-F)")
+            .disabled(revision == nil)
+
+            Toggle(isOn: $showInspector) {
+                Label("Details", systemImage: "sidebar.right")
+            }
+            .toggleStyle(.button)
+            .help("Show notes, participants and speaker assignment")
+
+            Menu {
+                Button("Copy Notes") {
+                    Task {
+                        if await model.copyNotesToPasteboard(for: meetingID) != nil {
+                            showsCopyNotesFlash = true
+                        }
+                    }
+                }
+                .disabled(meeting == nil)
+                Button("Share as PDF…") {
+                    Task { await model.shareNotesAsPDF(for: meetingID) }
+                }
+                .disabled(meeting == nil)
+                Divider()
+                Button("Export Meeting as Markdown…") {
+                    let action = MacFocusedAsyncAction(target: meetingID) {
+                        await model.exportMeetingToFile($0)
+                    }
+                    Task { await action() }
+                }
+                Button("Export to Obsidian Vault") {
+                    Task { await model.exportMeetingToObsidianVault(meetingID) }
+                }
+            } label: {
+                Label(
+                    "Share Notes",
+                    systemImage: showsCopyNotesFlash ? "checkmark" : "square.and.arrow.up"
+                )
+            }
+            .help("Copy the notes, share them as a PDF or export the meeting")
+
+            if showsContinueRecording {
+                Button {
+                    showContinueRecordingConfirmation = true
+                } label: {
+                    Label(
+                        meeting?.status == .draft ? "Record into this note" : "Continue Recording",
+                        systemImage: meeting?.status == .draft ? "mic" : "record.circle"
+                    )
+                }
+                .help("Record additional audio into this meeting")
+            }
+        }
+        .controlSize(.small)
+        .buttonStyle(.borderless)
+        .padding(.horizontal, Steno.Space.m)
+        .padding(.vertical, Steno.Space.xs)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     /// Der Anhang-Knopf gehoert zu ruhenden Meetings: versteckt, solange

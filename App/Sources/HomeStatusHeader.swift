@@ -114,6 +114,10 @@ struct HomeStatusHeader: View {
                 .font(Steno.Typography.wordmark)
                 .foregroundStyle(Steno.Surfaces.ink(colorScheme))
             Spacer()
+            MicrophoneSelectionButton()
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(Steno.Surfaces.quietInk(colorScheme))
             SettingsLink {
                 Image(systemName: "gearshape")
                     .frame(width: 24, height: 24)

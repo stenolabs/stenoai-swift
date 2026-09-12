@@ -9,7 +9,6 @@ enum MacWindowPresentation {
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
@@ -47,76 +46,6 @@ struct ContentView: View {
         }
         .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
             if window != nil { model.registerTrashUndo(with: undoManager) }
-        }
-        .toolbar {
-            if model.isRecording {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.stopRecording() }
-                    } label: {
-                        Label("Stop recording", systemImage: "stop.circle.fill")
-                            .foregroundStyle(Steno.Colors.recording)
-                    }
-                    .help("Stop recording")
-                }
-            } else if model.isStartingRecording {
-                ToolbarItem(placement: .primaryAction) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .help("Preparing recording")
-                }
-            } else {
-                ToolbarItem(placement: .primaryAction) {
-                    MicrophoneSelectionButton()
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button {
-                            Task { await model.createDraftMeeting() }
-                        } label: {
-                            Label("New note", systemImage: "square.and.pencil")
-                        }
-                        .disabled(model.runtime == nil)
-                        Divider()
-                        Button("Import Audio File…") {
-                            model.requestAudioImport()
-                        }
-                        Button("Import Meeting Package…") {
-                            model.requestMeetingTransferImport()
-                        }
-                        Button("Import from Legacy Steno App…") {
-                            openWindow(id: "legacy-import")
-                        }
-                    } label: {
-                        Label("Note options", systemImage: "ellipsis.circle")
-                    }
-                    .help("Create a draft or import an existing recording")
-                    .disabled(model.runtime == nil)
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.createDraftMeeting() }
-                    } label: {
-                        Label("New note", systemImage: "square.and.pencil")
-                    }
-                    .disabled(model.runtime == nil)
-                }
-
-                if model.meetings.first(where: { $0.id == model.selectedMeetingID })?.status != .draft {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.startRecording() }
-                    } label: {
-                        Label("Start Recording", systemImage: "record.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .help("Start a new recording")
-                    .disabled(!model.canStartRecording)
-                }
-                }
-            }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
