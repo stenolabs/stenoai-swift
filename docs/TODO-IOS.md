@@ -7,7 +7,7 @@ that every macOS platform integration exists on iPhone or iPad.
 
 | Area | iPhone and iPad behavior |
 | --- | --- |
-| Short recordings | An explicitly stopped recording shorter than 15 seconds keeps its original audio and a durable confirmation marker. Transcription starts only after confirmation. The deferred job retains the recording's language and processing generation. Interrupted capture continues through the existing recovery path. |
+| Short recordings | An explicitly stopped recording shorter than 15 seconds keeps its original audio and a durable confirmation marker. Final transcription starts only after confirmation; live transcription during capture is unchanged. The deferred job retains the recording's language and processing generation. Interrupted capture continues through the existing recovery path. |
 | Duration | Meeting duration uses the complete appended timeline, including offsets, rather than the longest individual asset. Home shows a duration when usable media metadata exists. |
 | Home | Home is the initial route and offers recording, a new note, and the eight most recent meetings. Native list layout and adaptive metadata accommodate compact widths. Long titles wrap in the list and appear in full with the duration in meeting detail. Compact meeting toolbars place preparation and sharing in the actions menu. |
 | Content search | Sidebar search defaults to notes, reports, and transcripts through the shared local search index. A scope control appears while searching. An indexing failure is visible and retains title search as a fallback. Removed meetings are filtered from results. |
