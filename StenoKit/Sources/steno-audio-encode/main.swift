@@ -1,12 +1,14 @@
 import Darwin
 import Foundation
+#if !STENO_STANDALONE_HELPER
 import StenoAudioEncoding
+#endif
 
-// Version 1 borrows inherited descriptors; the parent owns atomic publication and cleanup.
+// Version 2 borrows inherited descriptors; the parent owns atomic publication and cleanup.
 do {
     let arguments = Array(CommandLine.arguments.dropFirst())
     if arguments == ["--version"] {
-        print("steno-audio-encode 1")
+        print("steno-audio-encode 2")
     } else {
         guard arguments.count == 4, arguments[0] == "--input-fd",
               arguments[2] == "--output-fd", let source = Int32(arguments[1]),
@@ -14,7 +16,7 @@ do {
               source != destination else {
             throw CLIError.usage
         }
-        let result = try CAFEncoder.encode(source: source, destination: destination)
+        let result = try TransferAudioConverter.convert(source: source, destination: destination)
         let json = try JSONEncoder().encode(result)
         FileHandle.standardOutput.write(json + Data([10]))
     }

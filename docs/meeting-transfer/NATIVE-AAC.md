@@ -41,14 +41,26 @@ track. The final output is independently inspected and bound to the archive
 writer by identity and hash. The writer retains its existing atomic publication,
 archive reread, path, symlink, resource-limit and hash checks.
 
-## macOS helper contract, version 1
+## macOS helper contract, version 2
 
-Build only the helper (Apple Silicon, deployment target macOS 26):
+Build the standalone helper (Apple Silicon, deployment target macOS 14.4):
 
 ```sh
-swift build --package-path StenoKit -c release --product steno-audio-encode
-StenoKit/.build/release/steno-audio-encode --version
+scripts/build-audio-helper.sh
+.build/native-audio/helper-14.4/steno-audio-encode --version
+scripts/test-audio-helper.sh
 ```
+
+The standalone build compiles the same production sources directly with Swift 6,
+without the app or model dependency graph. It does not lower either app's deployment
+target. A verified `minos 14.4` load command establishes the deployment setting;
+runtime acceptance on macOS 14.4 remains a separate check.
+
+`TransferAudioConverter.convert` detects PCM CAF, RIFF/WAVE and WebM by header.
+PCM CAF/WAV is encoded as AAC. Already-compressed CAF must be passed through by
+the parent; the CLI deliberately does not handle that policy. Source identity,
+size, modification/change timestamps and SHA-256 are checked across conversion.
+The result includes the actual output hash and size. Hashes use bounded reads.
 
 Invocation: `steno-audio-encode --input-fd 3 --output-fd 4`.
 The parent must open the source read-only/no-follow, verify regular-file identity,
@@ -59,10 +71,11 @@ argument array and `shell: false`; paths are not accepted by the helper.
 On exit 0, stdout is one JSON object plus newline:
 
 ```json
-{"sampleRate":48000,"channelCount":2,"frameCount":480013,"bitRate":128000}
+{"codec":"aac","operation":"encoded-aac","sampleRate":48000,"channelCount":2,"frameCount":480013,"bitRate":128000,"sourceSHA256":"<64 lowercase hex digits>","outputSHA256":"<64 lowercase hex digits>","byteCount":160000}
 ```
 
-Object key order is unspecified. On nonzero exit, stderr contains a diagnostic;
+For Opus the codec is `opus`, the operation is `repackaged-opus`, and `bitRate`
+is omitted. Numeric values above are illustrative. Object key order is unspecified. On nonzero exit, stderr contains a diagnostic;
 there is no success object. The parent must impose its normal timeout and output
 limits, kill/wait for the child on cancellation, close descriptors, and remove
 the task-owned partial output. SIGTERM/SIGKILL do not promise child-side cleanup.
@@ -76,6 +89,38 @@ with `codesign --verify --strict` and inspect `codesign -d --verbose=4` and `oto
 network or model permission. Distribution signing/notarization and the Electron
 sandbox/child-launch configuration require integration testing; the local build
 is not a distribution-signing acceptance test.
+
+## Supported WebM subset
+
+The FD-backed reader streams one 48 kHz Opus audio track with mapping family 0,
+one or two channels, OpusHead version 1, zero gain, and input rate 0 or 48 kHz.
+It accepts a timestamp scale of at most 1 ms and a unit track timestamp scale.
+Tracks and timing metadata must precede audio. Content encodings and lacing are
+not supported. These are helper compatibility limits, not claims that other
+WebM files are invalid.
+
+Every block timestamp is compared to the cumulative Opus packet duration within
+one container timestamp tick. The first raw block timestamp must be zero. Gaps,
+overlaps and start offsets outside that tolerance are rejected. CodecDelay must
+match Opus pre-skip within one nanosecond; omission is accepted only for zero
+pre-skip. Positive, integral-frame DiscardPadding is accepted only on the final
+packet and cannot exceed that packet's duration. Negative/nonfinal padding and
+unsupported block-group timing are rejected. Truncated declared payloads are
+rejected; an unknown-length stream cannot prove that whole trailing packets were
+not lost before it reached the helper.
+
+Packets remain byte-identical. CAF packet-table priming/remainder represent the
+pre-skip and final trim; `frameCount` is the audible frame count after both.
+The finalized CAF is decoded in bounded chunks to verify native decodability and
+exact valid duration. This validation does not re-encode the packets.
+
+Input is capped at 16 GiB, one million Opus packets and four million EBML elements.
+The reader uses a 64 KiB window, caps an individual payload read at 1 MiB and
+CodecPrivate at 64 KiB. Output batches target 128 packets or 64 KiB, with one
+packet allowed to exceed that byte target. Native codec/packet-table allocations
+are additional. Cancellation is checked throughout reading, writing and validation.
+Every error requires parent cleanup of the partial output; there is no ffmpeg
+fallback and no modification of source files.
 
 ## Reader and manifest integration
 
@@ -101,10 +146,9 @@ Opus playback support. Decode with a native platform decoder, not a PCM cast.
 
 In Electron, replace `prepareMeetingTransferAudio`'s Float32-PCM conversion with
 an explicit policy: retain already suitable compressed CAF, invoke the helper
-for mono/stereo PCM CAF, then inspect/hash the actual result and keep PCM if it
-is smaller. This helper does not accept WebM; use the separately reviewed legacy
-Opus repackaging path where applicable. Do not claim Windows compatibility from
-this macOS helper.
+for mono/stereo PCM CAF or WAV, then inspect/hash the actual result and keep PCM
+if it is smaller. Supported WebM Opus is repackaged without re-encoding. Do not
+claim Windows compatibility from this macOS helper.
 
 ## Identity limitation
 
@@ -139,3 +183,8 @@ fixture. It contains generated tones and synthetic meeting text only. The local
 handoff records the actual fixture and verification-log paths. Physical AirDrop,
 Electron playback/import, production signing and physical iOS-device behavior
 are separate acceptance checks.
+
+The isolated `scripts/test-audio-helper.sh` runs the production helper sources
+with synthetic WAV encode/decode, byte-identical real Opus packet remux, exact
+pre-skip/end-trim and decoded sample comparison, timing/truncation rejection,
+cancellation and source-mutation checks. It does not replace either app suite.

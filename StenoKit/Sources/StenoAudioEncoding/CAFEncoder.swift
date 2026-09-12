@@ -12,10 +12,13 @@ public enum CAFEncoder {
         public let bitRate: UInt32
     }
 
+    public enum InputContainer: Sendable { case caf, wave }
+
     public enum Failure: Error { case invalidFiles, unsupportedFormat, audio(OSStatus, line: UInt) }
 
     public static func encode(
         source: Int32, destination: Int32,
+        inputContainer: InputContainer = .caf,
         checkCancellation: () throws -> Void = { try Task.checkCancellation() }
     ) throws -> Result {
         try checkCancellation()
@@ -29,7 +32,7 @@ public enum CAFEncoder {
         return try withExtendedLifetime((input, output)) {
             var sourceFile: AudioFileID?
             try checked(AudioFileOpenWithCallbacks(Unmanaged.passUnretained(input).toOpaque(),
-                readAudio, nil, audioSize, nil, kAudioFileCAFType, &sourceFile))
+                readAudio, nil, audioSize, nil, inputContainer == .caf ? kAudioFileCAFType : kAudioFileWAVEType, &sourceFile))
             guard let sourceFile else { throw Failure.invalidFiles }
             defer { AudioFileClose(sourceFile) }
             var reader: ExtAudioFileRef?
@@ -120,42 +123,4 @@ public enum CAFEncoder {
     private static func checked(_ status: OSStatus, line: UInt = #line) throws {
         if status != noErr { throw Failure.audio(status, line: line) }
     }
-}
-
-private final class Context {
-    let fd: Int32
-    init(_ fd: Int32) { self.fd = fd }
-}
-private let readAudio: AudioFile_ReadProc = { context, position, requested, buffer, actual in
-    let fd = Unmanaged<Context>.fromOpaque(context).takeUnretainedValue().fd
-    actual.pointee = 0
-    guard position >= 0 else { return kAudioFileInvalidFileError }
-    while actual.pointee < requested {
-        let n = pread(fd, buffer.advanced(by: Int(actual.pointee)), Int(requested - actual.pointee), position + Int64(actual.pointee))
-        if n < 0 { if errno == EINTR { continue }; return OSStatus(errno) }
-        if n == 0 { break }
-        actual.pointee += UInt32(n)
-    }
-    return noErr
-}
-private let writeAudio: AudioFile_WriteProc = { context, position, requested, buffer, actual in
-    let fd = Unmanaged<Context>.fromOpaque(context).takeUnretainedValue().fd
-    actual.pointee = 0
-    guard position >= 0 else { return kAudioFileInvalidFileError }
-    while actual.pointee < requested {
-        let n = pwrite(fd, buffer.advanced(by: Int(actual.pointee)), Int(requested - actual.pointee), position + Int64(actual.pointee))
-        if n < 0 { if errno == EINTR { continue }; return OSStatus(errno) }
-        if n == 0 { return kAudioFileInvalidFileError }
-        actual.pointee += UInt32(n)
-    }
-    return noErr
-}
-private let audioSize: AudioFile_GetSizeProc = { context in
-    var value = stat()
-    let fd = Unmanaged<Context>.fromOpaque(context).takeUnretainedValue().fd
-    return fstat(fd, &value) == 0 ? value.st_size : 0
-}
-private let setAudioSize: AudioFile_SetSizeProc = { context, size in
-    let fd = Unmanaged<Context>.fromOpaque(context).takeUnretainedValue().fd
-    return ftruncate(fd, size) == 0 ? noErr : OSStatus(errno)
 }

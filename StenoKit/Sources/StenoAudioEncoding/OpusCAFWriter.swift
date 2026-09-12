@@ -1,4 +1,5 @@
 import AudioToolbox
+import Darwin
 import Foundation
 
 public enum OpusCAFWriteMode: Equatable, Sendable {
@@ -84,7 +85,7 @@ public enum OpusCAFWriter {
     }
 }
 
-private extension OpusCAFWriter {
+extension OpusCAFWriter {
     static let packetsPerWrite = 1_024
 
     static func validate(_ audio: WebMOpusAudio) throws {
@@ -110,11 +111,13 @@ private extension OpusCAFWriter {
         }
     }
 
+    @discardableResult
     static func writePackets(
         _ packets: [Data],
-        to file: AudioFileID
-    ) throws {
-        var startingPacket: Int64 = 0
+        to file: AudioFileID,
+        startingAt: Int64 = 0
+    ) throws -> Int64 {
+        var startingPacket: Int64 = startingAt
         var startIndex = 0
         while startIndex < packets.count {
             let endIndex = min(startIndex + packetsPerWrite, packets.count)
@@ -166,6 +169,7 @@ private extension OpusCAFWriter {
             startingPacket += Int64(writtenPacketCount)
             startIndex = endIndex
         }
+        return startingPacket
     }
 
     static func opusFrameCount(_ packet: Data) -> UInt32? {
@@ -203,6 +207,66 @@ private extension OpusCAFWriter {
                 operation: operation,
                 status: status
             )
+        }
+    }
+}
+
+extension OpusCAFWriter {
+    /// Remuxes a bounded, timing-validated WebM stream into an empty borrowed FD.
+    /// The caller removes partial output on failure; no pathname is ever opened.
+    public static func repackage(
+        source: Int32, destination: Int32,
+        checkCancellation: @escaping () throws -> Void = { try Task.checkCancellation() }
+    ) throws -> WebMOpusStreamSummary {
+        var original = stat(), target = stat()
+        guard fstat(source, &original) == 0, fstat(destination, &target) == 0,
+              original.st_mode & S_IFMT == S_IFREG, target.st_mode & S_IFMT == S_IFREG,
+              target.st_size == 0, original.st_dev != target.st_dev || original.st_ino != target.st_ino else {
+            throw CAFEncoder.Failure.invalidFiles
+        }
+        let context = Context(destination)
+        return try withExtendedLifetime(context) {
+            var file: AudioFileID?
+            defer { if let file { AudioFileClose(file) } }
+            var buffered: [Data] = []
+            var bufferedBytes = 0
+            var startingPacket: Int64 = 0
+            func flush() throws {
+                try checkCancellation()
+                guard let file else { throw OpusCAFWriterError.invalidMagicCookie }
+                startingPacket = try writePackets(buffered, to: file, startingAt: startingPacket)
+                buffered.removeAll(keepingCapacity: true)
+                bufferedBytes = 0
+            }
+            let summary = try WebMOpusReader.stream(from: source, checkCancellation: checkCancellation,
+                onHeader: { info in
+                    var format = AudioStreamBasicDescription(mSampleRate: 48_000,
+                        mFormatID: kAudioFormatOpus, mFormatFlags: 0, mBytesPerPacket: 0,
+                        mFramesPerPacket: 0, mBytesPerFrame: 0, mChannelsPerFrame: info.channelCount,
+                        mBitsPerChannel: 0, mReserved: 0)
+                    try requireNoError(AudioFileInitializeWithCallbacks(Unmanaged.passUnretained(context).toOpaque(),
+                        readAudio, writeAudio, audioSize, setAudioSize, kAudioFileCAFType, &format, [], &file),
+                        operation: "AudioFileInitializeWithCallbacks")
+                    guard let file else { throw OpusCAFWriterError.invalidMagicCookie }
+                    try info.magicCookie.withUnsafeBytes { bytes in
+                        try requireNoError(AudioFileSetProperty(file, kAudioFilePropertyMagicCookieData,
+                            UInt32(bytes.count), bytes.baseAddress!), operation: "MagicCookieData")
+                    }
+                }, onPacket: { packet, _ in
+                    if !buffered.isEmpty && (bufferedBytes + packet.count > 65_536 || buffered.count == 128) { try flush() }
+                    buffered.append(packet)
+                    bufferedBytes += packet.count
+                })
+            if !buffered.isEmpty { try flush() }
+            guard let opened = file else { throw OpusCAFWriterError.invalidMagicCookie }
+            var table = AudioFilePacketTableInfo(mNumberValidFrames: summary.validFrameCount,
+                mPrimingFrames: Int32(summary.info.preSkip), mRemainderFrames: Int32(summary.remainderFrames))
+            try requireNoError(AudioFileSetProperty(opened, kAudioFilePropertyPacketTableInfo,
+                UInt32(MemoryLayout.size(ofValue: table)), &table), operation: "PacketTableInfo")
+            file = nil
+            try requireNoError(AudioFileClose(opened), operation: "AudioFileClose")
+            try checkCancellation()
+            return summary
         }
     }
 }
