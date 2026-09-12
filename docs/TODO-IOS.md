@@ -59,6 +59,9 @@ Actual simulator UI checks used only synthetic meeting notes and silent audio:
   meeting titles and duration; short-recording decisions; delete and Undo;
   Recently deleted restoration after app restart, preserving the pending short
   recording decision; the top Undo banner and return to Home after deletion.
+  The final automatic transcript-search placement was also checked after unlock:
+  a visible, editable search field in landscape and a compact search button in
+  portrait replace the empty collapsed drawer.
 
 The default parallel core run encountered timeouts and a performance-budget
 failure under load; the complete run using the repository's CI setting passed
@@ -71,9 +74,6 @@ sets its normal Dynamic Type size rather than inheriting simulator preferences.
 - Freeform iPad window resizing and simultaneous interaction across two scenes
   were not manually exercised. Per-window navigation and conflicting chat
   mutations are covered by regression tests.
-- The final switch from a forced transcript-search drawer to automatic native
-  placement builds and passes tests; its final visual recheck is pending because
-  the host Mac relocked after the other simulator checks.
 - Real microphone/background capture and actual model inference were not run in
   this maintenance task. Tests use isolated libraries, synthetic content, and fake
   model providers; no model download is required.
