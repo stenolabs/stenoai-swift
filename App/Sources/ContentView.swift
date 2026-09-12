@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 enum MacWindowPresentation {
     static let meetingsTitle: LocalizedStringResource = "Meetings"
+    static let minimumContentSize = CGSize(width: 980, height: 560)
 }
 
 struct ContentView: View {
@@ -14,68 +15,67 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
-            WindowStableSidebar {
-                HomeStatusHeader(model: model)
-            } content: {
-                MeetingSidebarView(selection: $model.selectedMeetingIDs)
+        WindowStableRoot {
+            NavigationSplitView {
+                WindowStableSidebar {
+                    HomeStatusHeader(model: model)
+                } content: {
+                    MeetingSidebarView(selection: $model.selectedMeetingIDs)
+                }
+                .navigationSplitViewColumnWidth(
+                    min: 220,
+                    ideal: Steno.Layout.sidebarIdealWidth,
+                    max: 320
+                )
+            } detail: {
+                WindowStableDetail {
+                    // Aufnahme ist ein Zustand des Meetings, kein Modus der App.
+                    // Vorher ersetzte sie die ganze Detailflaeche, egal welches
+                    // Meeting gewaehlt war - ausgerechnet im Gespraech, wo man
+                    // nachschlagen will, war die Bibliothek unerreichbar. Der Streifen
+                    // bleibt sichtbar und haelt den Rueckweg offen.
+                    VStack(spacing: 0) {
+                        if model.isRecording {
+                            RecordingStrip()
+                        }
+                        detailContent
+                    }
+                }
             }
-            .navigationSplitViewColumnWidth(
-                min: 220,
-                ideal: Steno.Layout.sidebarIdealWidth,
-                max: 320
-            )
-        } detail: {
-            WindowStableDetail {
-                // Aufnahme ist ein Zustand des Meetings, kein Modus der App.
-                // Vorher ersetzte sie die ganze Detailflaeche, egal welches
-                // Meeting gewaehlt war - ausgerechnet im Gespraech, wo man
-                // nachschlagen will, war die Bibliothek unerreichbar. Der Streifen
-                // bleibt sichtbar und haelt den Rueckweg offen.
+            .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
+                if window != nil { model.registerTrashUndo(with: undoManager) }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    if model.isRecording {
-                        RecordingStrip()
-                    }
-                    detailContent
-                }
-            }
-            // Keep the window usable without feeding a child preference back
-            // into the view tree. A changing minimum width here can invalidate
-            // AppKit constraints while SwiftUI removes a detail toolbar.
-            .frame(minWidth: 560)
-        }
-        .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
-            if window != nil { model.registerTrashUndo(with: undoManager) }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                if case .failed(let failure) = model.startupState,
-                   MacGlobalStatusSurface.startupFailure == .top {
-                    MacStartupFailedView(failure: failure) {
-                        await model.retryStartup()
-                    }
-                    .transition(statusTransition(edge: .top))
-                }
-                if let notice = model.notice,
-                   MacGlobalStatusSurface.notice(isError: notice.isError) == .top {
-                    noticeBanner(notice)
+                    if case .failed(let failure) = model.startupState,
+                       MacGlobalStatusSurface.startupFailure == .top {
+                        MacStartupFailedView(failure: failure) {
+                            await model.retryStartup()
+                        }
                         .transition(statusTransition(edge: .top))
-                }
-                if model.startupState == .ready {
-                    ForEach(model.startupWarnings) { warning in
-                        MacStartupWarningBanner(warning: warning)
                     }
-                    ForEach(model.libraryIssues) { issue in
-                        MacLibraryIssueBanner(
-                            issue: issue,
-                            isRetrying: model.retryingLibraryIssueIDs.contains(issue.id)
-                        ) {
-                            await model.retryLibraryIssue(issue)
+                    if let notice = model.notice,
+                       MacGlobalStatusSurface.notice(isError: notice.isError) == .top {
+                        noticeBanner(notice)
+                            .transition(statusTransition(edge: .top))
+                    }
+                    if model.startupState == .ready {
+                        ForEach(model.startupWarnings) { warning in
+                            MacStartupWarningBanner(warning: warning)
+                        }
+                        ForEach(model.libraryIssues) { issue in
+                            MacLibraryIssueBanner(
+                                issue: issue,
+                                isRetrying: model.retryingLibraryIssueIDs.contains(issue.id)
+                            ) {
+                                await model.retryLibraryIssue(issue)
+                            }
                         }
                     }
                 }
+                .animation(statusAnimation, value: model.notice)
+                .animation(statusAnimation, value: model.startupState)
             }
-        }
         .fileImporter(
             isPresented: $model.wantsAudioImport,
             allowedContentTypes: [.audio],
@@ -127,43 +127,47 @@ struct ContentView: View {
         // Eine Meldungsleiste fuer alles, was der Benutzer erfahren muss,
         // unabhaengig davon, welche Ansicht gerade offen ist. Sie blockiert
         // nicht und verschwindet erst auf Klick.
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                if let trashUndo = model.pendingTrashUndo {
-                    HStack(alignment: .bottom) {
-                        UndoDeleteToast(
-                            window: trashUndo,
-                            onUndo: { Task { await model.restoreTrashedMeetings() } },
-                            onExpire: { model.expireTrashUndoIfElapsed() }
-                        )
-                        Spacer()
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    if let trashUndo = model.pendingTrashUndo {
+                        HStack(alignment: .bottom) {
+                            UndoDeleteToast(
+                                window: trashUndo,
+                                onUndo: { Task { await model.restoreTrashedMeetings() } },
+                                onExpire: { model.expireTrashUndoIfElapsed() }
+                            )
+                            Spacer()
+                        }
+                        .padding(.horizontal, Steno.Space.m)
+                        .transition(statusTransition(edge: .bottom))
                     }
-                    .padding(.horizontal, Steno.Space.m)
-                    .transition(statusTransition(edge: .bottom))
+                    if let export = model.audioExportActivity,
+                       MacGlobalStatusSurface.audioExport == .bottom {
+                        audioExportBanner(export)
+                            .transition(statusTransition(edge: .bottom))
+                    }
+                    if let notice = model.notice,
+                       MacGlobalStatusSurface.notice(isError: notice.isError) == .bottom {
+                        noticeBanner(notice)
+                            .transition(statusTransition(edge: .bottom))
+                    }
                 }
-                if let export = model.audioExportActivity,
-                   MacGlobalStatusSurface.audioExport == .bottom {
-                    audioExportBanner(export)
-                        .transition(statusTransition(edge: .bottom))
-                }
-                if let notice = model.notice,
-                   MacGlobalStatusSurface.notice(isError: notice.isError) == .bottom {
-                    noticeBanner(notice)
-                        .transition(statusTransition(edge: .bottom))
+                .animation(statusAnimation, value: model.notice)
+                .animation(statusAnimation, value: model.audioExportActivity)
+                .animation(statusAnimation, value: model.pendingTrashUndo)
+            }
+            .overlay {
+                if model.isCommandPalettePresented {
+                    CommandPaletteView(model: model) {
+                        model.isCommandPalettePresented = false
+                    }
                 }
             }
         }
-        .animation(statusAnimation, value: model.notice)
-        .animation(statusAnimation, value: model.audioExportActivity)
-        .animation(statusAnimation, value: model.startupState)
-        .overlay {
-            if model.isCommandPalettePresented {
-                CommandPaletteView(model: model) {
-                    model.isCommandPalettePresented = false
-                }
-            }
-        }
-        .animation(statusAnimation, value: model.pendingTrashUndo)
+        .frame(
+            minWidth: MacWindowPresentation.minimumContentSize.width,
+            minHeight: MacWindowPresentation.minimumContentSize.height
+        )
     }
 
     private var statusMotionPolicy: MacStatusMotionPolicy {
@@ -207,6 +211,27 @@ struct ContentView: View {
         }
         .padding(8)
         .background(.bar)
+    }
+}
+
+/// Prevents split-view, inspector and titlebar fitting sizes from becoming
+/// dynamic window constraints. Only the constant frame outside this boundary
+/// participates in the Window scene's minimum-size calculation.
+struct WindowStableRoot<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            content
+                .frame(
+                    width: geometry.size.width,
+                    height: geometry.size.height
+                )
+        }
     }
 }
 

@@ -52,9 +52,6 @@ struct RecordingView: View {
             Divider()
             transcript
         }
-        // Mitschreiben waehrend der Aufnahme ist der Hauptfall fuer Notizen,
-        // nicht die Ausnahme.
-        .frame(minWidth: 560)
         .inspector(isPresented: $showNotes) {
             Group {
                 if let meetingID = model.recordingMeetingID {

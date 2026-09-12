@@ -131,7 +131,6 @@ struct MeetingDetailView: View {
         }
         .navigationTitle(meeting?.title ?? "")
         .navigationSubtitle(subtitle)
-        .frame(minWidth: 560)
         .inspector(isPresented: $showInspector) { inspectorContent }
         .sheet(isPresented: $showMeetingTransferExport) {
             MeetingTransferExportView(meetingID: meetingID)
