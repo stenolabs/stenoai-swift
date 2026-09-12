@@ -11,6 +11,7 @@ struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var meetingTransferSceneID = MeetingTransferSceneID()
     @State private var restoreFailure: String?
+    @State private var dismissedUndoID: UUID?
     @State private var sidebarRevealEvents = IOSSidebarRevealEventState()
 
     /// Each window starts on Home with an explicit matching sidebar selection.
@@ -30,26 +31,8 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             startupBanners
+            trashUndoBanner
             splitView
-        }
-        .safeAreaInset(edge: .bottom) {
-            if let receipt = model.pendingTrashUndo {
-                HStack {
-                    Text("Moved to Trash").lineLimit(1)
-                    Spacer()
-                    Button("Undo") {
-                        Task {
-                            do {
-                                if let id = try await model.restoreLastTrashedMeeting() { router.select(.meeting(id)) }
-                            } catch { restoreFailure = String(localized: "The meeting could not be restored.") }
-                        }
-                    }
-                    .disabled(model.libraryActionIsInFlight)
-                    .accessibilityHint(receipt.title)
-                }
-                .padding()
-                .background(.bar)
-            }
         }
         .alert("Restore meeting", isPresented: Binding(get: { restoreFailure != nil }, set: { if !$0 { restoreFailure = nil } })) {
             Button("OK") { restoreFailure = nil }
@@ -96,6 +79,32 @@ struct ContentView: View {
         ) {
             MeetingTransferImportSheet(sceneID: meetingTransferSceneID)
                 .environment(model)
+        }
+    }
+
+    @ViewBuilder
+    private var trashUndoBanner: some View {
+        if let receipt = model.pendingTrashUndo, receipt.id != dismissedUndoID {
+            HStack(spacing: 12) {
+                Text("Moved to Trash").lineLimit(1)
+                Spacer(minLength: 0)
+                Button("Undo") {
+                    Task {
+                        do {
+                            if let id = try await model.restoreLastTrashedMeeting() { router.select(.meeting(id)) }
+                        } catch { restoreFailure = String(localized: "The meeting could not be restored.") }
+                    }
+                }
+                .frame(minHeight: 44)
+                .fixedSize(horizontal: true, vertical: false)
+                .disabled(model.libraryActionIsInFlight)
+                .accessibilityHint(receipt.title)
+                Button("Dismiss", systemImage: "xmark") { dismissedUndoID = receipt.id }
+                    .labelStyle(.iconOnly)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .padding(.horizontal)
+            .background(.bar)
         }
     }
 

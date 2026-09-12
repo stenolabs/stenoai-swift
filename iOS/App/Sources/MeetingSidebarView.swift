@@ -469,7 +469,7 @@ struct MeetingSidebarView: View {
     ) -> some View {
         let dropSurface = IOSSidebarNoFolderDropSurface.unfiledSection(section.id)
         let isTargeted = targetedUnfiledSectionID == section.id
-        return Text(section.title)
+        return Text(LocalizedStringKey(section.title))
             .font(.caption)
             .foregroundStyle(isTargeted ? Steno.Colors.brand : Color.secondary)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)

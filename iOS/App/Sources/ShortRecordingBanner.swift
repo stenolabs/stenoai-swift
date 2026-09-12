@@ -73,10 +73,12 @@ struct ShortRecordingBanner: View {
         Button("Transcribe") {
             perform { try await app.confirmShortRecording(decision) }
         }
-        Button("Later") { dismissed = decision.job.id }
+        .frame(minHeight: 44)
+        Button("Later") { dismissed = decision.job.id }.frame(minHeight: 44)
         Button("Move to Trash", role: .destructive) {
             perform { _ = try await app.deleteMeeting(meetingID) }
         }
+        .frame(minHeight: 44)
     }
 
     private func perform(_ action: @escaping @MainActor () async throws -> Void) {

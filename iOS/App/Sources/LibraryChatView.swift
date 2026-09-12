@@ -157,6 +157,12 @@ struct LibraryChatView: View {
                 }
             }
             .navigationTitle("Chat history")
+            .overlay {
+                if sessions.isEmpty {
+                    ContentUnavailableView("No chats yet", systemImage: "bubble.left.and.bubble.right",
+                        description: Text("Your conversations appear here after you send a question."))
+                }
+            }
             .toolbar { Button("Done") { showHistory = false } }
         }
     }

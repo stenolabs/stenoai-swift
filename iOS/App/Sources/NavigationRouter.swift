@@ -27,7 +27,7 @@ final class NavigationRouter {
         guard let selectedMeetingID,
               removedMeetingIDs.contains(selectedMeetingID)
         else { return }
-        select(.recording)
+        select(.home)
     }
 
     /// Applies an asynchronous deletion result to this window without
@@ -37,7 +37,7 @@ final class NavigationRouter {
         cleanupWarning: String?
     ) {
         if selectedMeetingID == meetingID {
-            select(.recording)
+            select(.home)
         }
         if let cleanupWarning {
             meetingActionAlert = .cleanupWarning(cleanupWarning)

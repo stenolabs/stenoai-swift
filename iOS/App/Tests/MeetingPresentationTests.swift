@@ -422,7 +422,7 @@ struct MeetingPresentationTests {
                 == MeetingEmptyState(
                     title: "No transcript yet",
                     systemImage: "text.quote",
-                    description: "Audio saved. No transcript yet. If the speech model is missing, install it under Audio readiness. Steno retries automatically."
+                    description: "Your audio is saved. You can start transcription from the meeting actions when you are ready."
                 )
         )
     }

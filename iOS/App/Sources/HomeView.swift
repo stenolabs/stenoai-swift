@@ -14,7 +14,7 @@ struct HomeView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
-                    greeting.font(.largeTitle.bold())
+                    greeting.font(.system(.largeTitle, design: .serif).weight(.semibold))
                     Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
                         .foregroundStyle(.secondary)
                     Text("Ready when you are.")
@@ -40,23 +40,30 @@ struct HomeView: View {
                 }
                 ForEach(recent, id: \.id) { meeting in
                     Button { router.select(.meeting(meeting.id)) } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(meeting.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
-                            ViewThatFits(in: .horizontal) {
-                                HStack {
-                                    date(meeting)
-                                    if let duration = durations[meeting.id] { durationLabel(duration) }
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(meeting.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
+                                ViewThatFits(in: .horizontal) {
+                                    HStack {
+                                        date(meeting)
+                                        if let duration = durations[meeting.id] { durationLabel(duration) }
+                                    }
+                                    VStack(alignment: .leading) {
+                                        date(meeting)
+                                        if let duration = durations[meeting.id] { durationLabel(duration) }
+                                    }
                                 }
-                                VStack(alignment: .leading) {
-                                    date(meeting)
-                                    if let duration = durations[meeting.id] { durationLabel(duration) }
-                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
-                        .padding(.vertical, 4)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

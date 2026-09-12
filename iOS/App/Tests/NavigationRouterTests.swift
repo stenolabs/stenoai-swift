@@ -89,7 +89,7 @@ struct NavigationRouterTests {
         router.select(.meeting(meetingID))
         router.reconcileSelectedMeeting(removedMeetingIDs: [meetingID])
 
-        #expect(router.selection == .recording)
+        #expect(router.selection == .home)
     }
 
     @Test("a late deletion completion keeps the newer route and publishes its warning")
