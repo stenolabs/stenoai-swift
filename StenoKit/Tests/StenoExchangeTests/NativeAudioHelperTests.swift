@@ -100,6 +100,27 @@ struct NativeAudioHelperTests {
         }
     }
 
+    @Test("streaming accepts more than one million valid Opus packets")
+    func longOpusStream() throws {
+        let root = try helperTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appending(path: "long.webm")
+        let packet = Data([0xF8, 0xFF, 0xFE])
+        let count = 1_000_001
+        try helperWebM(packets: Array(repeating: packet, count: count), knownClusterSize: true).write(to: source)
+        let fd = open(source.path, O_RDONLY | O_NOFOLLOW)
+        #expect(fd >= 0)
+        defer { close(fd) }
+        var received = 0
+        let summary = try WebMOpusReader.stream(from: fd, onHeader: { _ in }, onPacket: { bytes, frames in
+            guard bytes == packet, frames == 960 else { throw CocoaError(.fileReadCorruptFile) }
+            received += 1
+        })
+        #expect(received == count)
+        #expect(summary.packetCount == count)
+        #expect(summary.validFrameCount == Int64(count) * 960)
+    }
+
     @Test("streaming remux stops on cancellation and source mutation cannot succeed")
     func cancellationAndMutation() throws {
         let root = try helperTemporaryDirectory()
@@ -181,7 +202,7 @@ private func helperPackets(_ url: URL) throws -> (packets: [Data], priming: Int3
 
 private func helperWebM(packets: [Data], preSkip: UInt16 = 0, discardPadding: Int64 = 0,
                         timestamps: [Int]? = nil, trimIndex: Int? = nil,
-                        flags: UInt8 = 0x80, codecDelay: UInt64? = nil) -> Data {
+                        flags: UInt8 = 0x80, codecDelay: UInt64? = nil, knownClusterSize: Bool = false) -> Data {
     func e(_ id: [UInt8], _ payload: Data) -> Data {
         var size = 1
         while payload.count >= (1 << (7 * size)) - 1 { size += 1 }
@@ -208,7 +229,11 @@ private func helperWebM(packets: [Data], preSkip: UInt16 = 0, discardPadding: In
         if discardPadding != 0, index == (trimIndex ?? packets.count - 1) {
             cluster += e([0xA0], e([0xA1], block) + e([0x75, 0xA2], uint(UInt64(bitPattern: discardPadding))))
         } else { cluster += e([0xA3], block) }
-        body += Data([0x1F, 0x43, 0xB6, 0x75, 0x01]) + Data(repeating: 0xFF, count: 7) + cluster
+        if knownClusterSize {
+            body += e([0x1F, 0x43, 0xB6, 0x75], cluster)
+        } else {
+            body += Data([0x1F, 0x43, 0xB6, 0x75, 0x01]) + Data(repeating: 0xFF, count: 7) + cluster
+        }
     }
     return e([0x1A, 0x45, 0xDF, 0xA3], e([0x42, 0x82], Data("webm".utf8)))
         + Data([0x18, 0x53, 0x80, 0x67, 0x01]) + Data(repeating: 0xFF, count: 7) + body

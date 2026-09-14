@@ -114,7 +114,8 @@ pre-skip and final trim; `frameCount` is the audible frame count after both.
 The finalized CAF is decoded in bounded chunks to verify native decodability and
 exact valid duration. This validation does not re-encode the packets.
 
-Input is capped at 16 GiB, one million Opus packets and four million EBML elements.
+Input is capped at 16 GiB and four million EBML elements. Packet count is bounded
+by those input limits rather than a separate duration-dependent packet cap.
 The reader uses a 64 KiB window, caps an individual payload read at 1 MiB and
 CodecPrivate at 64 KiB. Output batches target 128 packets or 64 KiB, with one
 packet allowed to exceed that byte target. Native codec/packet-table allocations
