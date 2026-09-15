@@ -18,6 +18,7 @@ let package = Package(
     products: [
         .library(name: "StenoDomain", targets: ["StenoDomain"]),
         .library(name: "StenoLibrary", targets: ["StenoLibrary"]),
+        .library(name: "StenoAudioEncoding", targets: ["StenoAudioEncoding"]),
         .library(name: "StenoAudioCore", targets: ["StenoAudioCore"]),
         .library(name: "StenoMacAudio", targets: ["StenoMacAudio"]),
         .library(name: "StenoTranscription", targets: ["StenoTranscription"]),
@@ -27,6 +28,7 @@ let package = Package(
         .library(name: "StenoIntelligence", targets: ["StenoIntelligence"]),
         .library(name: "StenoPipeline", targets: ["StenoPipeline"]),
         .library(name: "StenoDemo", targets: ["StenoDemo"]),
+        .executable(name: "steno-audio-encode", targets: ["steno-audio-encode"]),
         .executable(name: "steno-smoke", targets: ["steno-smoke"]),
         .executable(name: "steno-transcribe", targets: ["steno-transcribe"]),
         .executable(name: "steno-live-transcribe", targets: ["steno-live-transcribe"]),
@@ -39,6 +41,8 @@ let package = Package(
         ),
     ],
     targets: [
+        .executableTarget(name: "steno-audio-encode", dependencies: ["StenoAudioEncoding"], swiftSettings: strictConcurrencySettings),
+        .target(name: "StenoAudioEncoding", swiftSettings: strictConcurrencySettings),
         .target(
             name: "StenoDomain",
             swiftSettings: strictConcurrencySettings
@@ -90,7 +94,7 @@ let package = Package(
         ),
         .target(
             name: "StenoExchange",
-            dependencies: ["StenoDomain", "StenoIdentity", "StenoLibrary"],
+            dependencies: ["StenoDomain", "StenoIdentity", "StenoLibrary", "StenoAudioEncoding"],
             swiftSettings: strictConcurrencySettings
         ),
         .target(
@@ -191,7 +195,7 @@ let package = Package(
         .testTarget(
             name: "StenoExchangeTests",
             dependencies: [
-                "StenoExchange", "StenoDomain", "StenoIdentity", "StenoLibrary",
+                "StenoExchange", "StenoDomain", "StenoIdentity", "StenoLibrary", "StenoAudioEncoding",
             ],
             resources: [.process("Fixtures")],
             swiftSettings: strictConcurrencySettings

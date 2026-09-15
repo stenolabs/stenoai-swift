@@ -160,26 +160,30 @@ public struct MeetingTransferExportService: Sendable {
             try exportAction(.afterAudioPreparation)
         }
 
+        let audioExport = selected.isEmpty ? nil : try MeetingTransferAudioExport(root: temporaryRoot)
+        defer { try? audioExport?.cleanup() }
         var audioDocuments: [MeetingTransferAudioDocument] = []
         var audioBindings: [MeetingTransferAudioSourceBinding] = []
         for (offset, source) in selected.enumerated() {
             try Task.checkCancellation()
             let logicalTrackID = "track-\(offset + 1)"
-            guard let preparedSource = source.preparedSource else {
+            guard let originalSource = source.preparedSource else {
                 throw MeetingTransferExportError.audioNotEligible
             }
+            let output = try audioExport!.prepare(sourceURL: source.sourceURL, expected: originalSource)
+            let preparedSource = output.source
             audioDocuments.append(try MeetingTransferAudioDocument(
                 logicalTrackID: logicalTrackID,
                 kind: source.asset.kind,
-                byteCount: source.byteCount,
+                byteCount: preparedSource.byteCount,
                 sha256: preparedSource.byteSHA256,
-                sampleRate: source.sampleRate,
-                channelCount: source.channelCount,
-                duration: source.duration
+                sampleRate: preparedSource.sampleRate,
+                channelCount: preparedSource.channelCount,
+                duration: preparedSource.duration
             ))
             audioBindings.append(MeetingTransferAudioSourceBinding(
                 logicalTrackID: logicalTrackID,
-                sourceURL: source.sourceURL,
+                sourceURL: output.url,
                 preparedSource: preparedSource
             ))
         }
@@ -212,6 +216,7 @@ public struct MeetingTransferExportService: Sendable {
             to: temporaryRoot,
             progress: progress
         )
+        try audioExport?.cleanup()
         let values = try packageURL.resourceValues(forKeys: [.fileSizeKey])
         guard let fileSize = values.fileSize else {
             throw MeetingTransferArchiveWriterError.writeFailed

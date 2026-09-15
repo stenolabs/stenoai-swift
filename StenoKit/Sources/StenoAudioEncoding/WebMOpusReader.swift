@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct WebMOpusAudio: Equatable, Sendable {
@@ -36,6 +37,9 @@ public enum WebMOpusReaderError: Error, Equatable, Sendable {
     case multipleOpusTracks
     case invalidOpusHead
     case unsupportedLacing(WebMLacing)
+    case unsupportedTiming(String)
+    case resourceLimit
+    case readFailed
 }
 
 public enum WebMOpusReader {
@@ -165,6 +169,7 @@ private extension WebMOpusReader {
                 guard let contentEnd = element.contentEnd else {
                     throw WebMOpusReaderError.malformedElement("TrackEntry has unknown size")
                 }
+                guard tracks.count < 64 else { throw WebMOpusReaderError.resourceLimit }
                 tracks.append(try readTrack(cursor: &cursor, end: contentEnd))
             } else {
                 try cursor.skip(element, name: "Tracks child")
@@ -174,10 +179,14 @@ private extension WebMOpusReader {
 
     static func readTrack(cursor: inout EBMLCursor, end: Int) throws -> Track {
         var track = Track()
+        var seen: Set<UInt64> = []
         while cursor.offset < end {
             let element = try cursor.readElementHeader(limit: end)
             guard let contentEnd = element.contentEnd else {
                 throw WebMOpusReaderError.malformedElement("Track child has unknown size")
+            }
+            guard seen.insert(element.id).inserted || element.id == 0xEC else {
+                throw WebMOpusReaderError.malformedElement("Duplicate track field")
             }
             switch element.id {
             case ElementID.trackNumber.rawValue:
@@ -187,7 +196,15 @@ private extension WebMOpusReader {
             case ElementID.codecID.rawValue:
                 track.codecID = try cursor.readString(until: contentEnd)
             case ElementID.codecPrivate.rawValue:
+                guard contentEnd - cursor.offset <= 65_536 else { throw WebMOpusReaderError.resourceLimit }
                 track.codecPrivate = try cursor.readData(until: contentEnd)
+            case 0x56AA: // CodecDelay, nanoseconds
+                track.codecDelay = try cursor.readUnsignedInteger(until: contentEnd)
+            case 0x23314F: // TrackTimestampScale
+                track.timestampScale = try cursor.readFloat(until: contentEnd)
+            case 0x6D80: // ContentEncodings (compression/encryption)
+                track.hasContentEncodings = true
+                cursor.offset = contentEnd
             case ElementID.audio.rawValue:
                 try readAudio(cursor: &cursor, end: contentEnd, track: &track)
             default:
@@ -202,10 +219,14 @@ private extension WebMOpusReader {
         end: Int,
         track: inout Track
     ) throws {
+        var seen: Set<UInt64> = []
         while cursor.offset < end {
             let element = try cursor.readElementHeader(limit: end)
             guard let contentEnd = element.contentEnd else {
                 throw WebMOpusReaderError.malformedElement("Audio child has unknown size")
+            }
+            guard seen.insert(element.id).inserted || element.id == 0xEC else {
+                throw WebMOpusReaderError.malformedElement("Duplicate audio field")
             }
             switch element.id {
             case ElementID.samplingFrequency.rawValue:
@@ -226,9 +247,10 @@ private extension WebMOpusReader {
         cursor: inout EBMLCursor,
         end: Int,
         hasUnknownSize: Bool,
-        blocks: inout [Block]
+        blocks: inout [Block],
+        process: ((UInt64, Block) throws -> Void)? = nil
     ) throws {
-        var hasTimecode = false
+        var timecode: UInt64?
         while cursor.offset < end {
             let elementStart = cursor.offset
             let element = try cursor.readElementHeader(limit: end)
@@ -238,40 +260,58 @@ private extension WebMOpusReader {
             }
             switch element.id {
             case ElementID.clusterTimecode.rawValue:
-                guard let contentEnd = element.contentEnd else {
-                    throw WebMOpusReaderError.malformedElement("Cluster Timecode has unknown size")
+                guard timecode == nil, let contentEnd = element.contentEnd else {
+                    throw WebMOpusReaderError.malformedElement("Invalid Cluster Timecode")
                 }
-                _ = try cursor.readUnsignedInteger(until: contentEnd)
-                hasTimecode = true
-            case ElementID.simpleBlock.rawValue:
-                blocks.append(try readBlock(cursor: &cursor, element: element))
-            case ElementID.blockGroup.rawValue:
-                try readBlockGroup(cursor: &cursor, element: element, blocks: &blocks)
+                timecode = try cursor.readUnsignedInteger(until: contentEnd)
+            case ElementID.simpleBlock.rawValue, ElementID.blockGroup.rawValue:
+                let block = element.id == ElementID.simpleBlock.rawValue
+                    ? try readBlock(cursor: &cursor, element: element)
+                    : try readBlockGroup(cursor: &cursor, element: element)
+                if let process {
+                    guard let timecode else { throw WebMOpusReaderError.unsupportedTiming("Timecode must precede blocks") }
+                    try process(timecode, block)
+                } else { blocks.append(block) }
             default:
                 try cursor.skip(element, name: "Cluster child")
             }
         }
-        guard hasTimecode else {
+        guard timecode != nil else {
             throw WebMOpusReaderError.malformedElement("Cluster has no Timecode")
         }
     }
 
-    static func readBlockGroup(
-        cursor: inout EBMLCursor,
-        element: EBMLElementHeader,
-        blocks: inout [Block]
-    ) throws {
+    static func readBlockGroup(cursor: inout EBMLCursor, element: EBMLElementHeader) throws -> Block {
         guard let end = element.contentEnd else {
             throw WebMOpusReaderError.malformedElement("BlockGroup has unknown size")
         }
+        var block: Block?
+        var discardPadding: Int64 = 0
+        var hasPadding = false
+        var hasOtherFields = false
         while cursor.offset < end {
             let child = try cursor.readElementHeader(limit: end)
             if child.id == ElementID.block.rawValue {
-                blocks.append(try readBlock(cursor: &cursor, element: child))
+                guard block == nil else { throw WebMOpusReaderError.malformedElement("Duplicate Block") }
+                block = try readBlock(cursor: &cursor, element: child)
+            } else if child.id == 0x75A2 { // signed DiscardPadding in nanoseconds
+                guard !hasPadding, let childEnd = child.contentEnd else {
+                    throw WebMOpusReaderError.malformedElement("Invalid DiscardPadding")
+                }
+                let count = childEnd - cursor.offset
+                let raw = try cursor.readUnsignedInteger(until: childEnd)
+                let shift = 64 - count * 8
+                discardPadding = Int64(bitPattern: raw << shift) >> shift
+                hasPadding = true
             } else {
+                if child.id != 0xEC && child.id != 0xBF { hasOtherFields = true }
                 try cursor.skip(child, name: "BlockGroup child")
             }
         }
+        guard var block else { throw WebMOpusReaderError.malformedElement("BlockGroup has no Block") }
+        block.discardPadding = discardPadding
+        block.hasUnsupportedTiming = block.hasUnsupportedTiming || hasOtherFields
+        return block
     }
 
     static func readBlock(
@@ -285,7 +325,9 @@ private extension WebMOpusReader {
         guard end - cursor.offset >= 3 else {
             throw WebMOpusReaderError.malformedElement("Block header is truncated")
         }
-        cursor.offset += 2
+        let high = try cursor.readByte(limit: end)
+        let low = try cursor.readByte(limit: end)
+        let relativeTimecode = Int16(bitPattern: UInt16(high) << 8 | UInt16(low))
         let flags = try cursor.readByte(limit: end)
         let lacing: WebMLacing = switch (flags & 0x06) >> 1 {
         case 0: .none
@@ -296,7 +338,9 @@ private extension WebMOpusReader {
         return Block(
             trackNumber: trackNumber,
             lacing: lacing,
-            payload: try cursor.readData(until: end)
+            payload: try cursor.readData(until: end),
+            relativeTimecode: relativeTimecode,
+            hasUnsupportedTiming: flags & 0x08 != 0
         )
     }
 
@@ -318,12 +362,18 @@ private struct Track {
     var codecPrivate: Data?
     var sampleRate: Double?
     var channelCount: UInt32?
+    var codecDelay: UInt64?
+    var timestampScale: Double = 1
+    var hasContentEncodings = false
 }
 
 private struct Block {
     let trackNumber: UInt64
     let lacing: WebMLacing
     let payload: Data
+    let relativeTimecode: Int16
+    var discardPadding: Int64 = 0
+    var hasUnsupportedTiming = false
 }
 
 private enum ElementID: UInt64 {
@@ -352,12 +402,16 @@ private struct EBMLElementHeader {
 }
 
 private struct EBMLCursor {
-    let data: Data
+    let source: WebMByteSource
     var offset = 0
 
+    init(data: Data) { source = WebMByteSource(data: data) }
+    init(source: WebMByteSource) { self.source = source }
+
     mutating func readElementHeader(limit: Int? = nil) throws -> EBMLElementHeader {
-        let boundary = limit ?? data.count
-        guard offset <= boundary, boundary <= data.count else {
+        try source.checkElement()
+        let boundary = limit ?? source.count
+        guard offset <= boundary, boundary <= source.count else {
             throw WebMOpusReaderError.malformedElement("Invalid parent boundary")
         }
         let id = try readID(limit: boundary)
@@ -383,11 +437,11 @@ private struct EBMLCursor {
     }
 
     mutating func readData(until end: Int) throws -> Data {
-        guard offset <= end, end <= data.count else {
+        guard offset <= end, end <= source.count else {
             throw WebMOpusReaderError.malformedElement("Invalid data range")
         }
         defer { offset = end }
-        return data.subdata(in: offset..<end)
+        return try source.read(offset: offset, count: end - offset)
     }
 
     mutating func readString(until end: Int) throws -> String {
@@ -440,11 +494,11 @@ private struct EBMLCursor {
     }
 
     mutating func readByte(limit: Int) throws -> UInt8 {
-        guard offset < limit, offset < data.count else {
+        guard offset < limit, offset < source.count else {
             throw WebMOpusReaderError.malformedElement("Unexpected end of data")
         }
         defer { offset += 1 }
-        return data[offset]
+        return try source.byte(at: offset)
     }
 
     private mutating func readID(limit: Int) throws -> UInt64 {
@@ -481,5 +535,206 @@ private struct EBMLCursor {
             isUnknown = isUnknown && byte == 0xFF
         }
         return isUnknown ? nil : value
+    }
+}
+
+/// One bounded read window for the FD path. The legacy Data API remains available.
+private final class WebMByteSource {
+    let count: Int
+    let data: Data?
+    let descriptor: Int32?
+    let checkCancellation: () throws -> Void
+    var window = Data()
+    var windowStart = -1
+    var elements = 0
+
+    init(data: Data) {
+        self.data = data
+        count = data.count
+        descriptor = nil
+        checkCancellation = { try Task.checkCancellation() }
+    }
+
+    init(descriptor: Int32, checkCancellation: @escaping () throws -> Void) throws {
+        var status = stat()
+        guard fstat(descriptor, &status) == 0, status.st_mode & S_IFMT == S_IFREG,
+              status.st_size > 0, status.st_size <= 16 * 1024 * 1024 * 1024 else {
+            throw WebMOpusReaderError.resourceLimit
+        }
+        count = Int(status.st_size)
+        self.descriptor = descriptor
+        self.checkCancellation = checkCancellation
+        data = nil
+    }
+
+    func checkElement() throws {
+        try checkCancellation()
+        elements += 1
+        guard elements <= 4_000_000 else { throw WebMOpusReaderError.resourceLimit }
+    }
+
+    func byte(at offset: Int) throws -> UInt8 {
+        if let data { return data[offset] }
+        if offset < windowStart || offset >= windowStart + window.count {
+            window = try read(offset: offset, count: min(65_536, count - offset))
+            windowStart = offset
+        }
+        return window[offset - windowStart]
+    }
+
+    func read(offset: Int, count: Int) throws -> Data {
+        guard count >= 0, count <= 1_048_576 else { throw WebMOpusReaderError.resourceLimit }
+        if let data { return data.subdata(in: offset..<(offset + count)) }
+        guard let descriptor else { throw WebMOpusReaderError.readFailed }
+        var bytes = Data(count: count)
+        try bytes.withUnsafeMutableBytes { buffer in
+            var consumed = 0
+            while consumed < count {
+                try checkCancellation()
+                let n = pread(descriptor, buffer.baseAddress!.advanced(by: consumed), count - consumed, off_t(offset + consumed))
+                if n < 0, errno == EINTR { continue }
+                guard n > 0 else { throw WebMOpusReaderError.readFailed }
+                consumed += n
+            }
+        }
+        return bytes
+    }
+}
+
+public struct WebMOpusStreamInfo: Sendable {
+    public let magicCookie: Data
+    public let channelCount: UInt32
+    public let preSkip: UInt32
+}
+
+public struct WebMOpusStreamSummary: Sendable {
+    public let info: WebMOpusStreamInfo
+    public let packetCount: Int
+    public let encodedFrameCount: Int64
+    public let remainderFrames: UInt32
+    public var validFrameCount: Int64 { encodedFrameCount - Int64(info.preSkip) - Int64(remainderFrames) }
+}
+
+extension WebMOpusReader {
+    /// Strict, bounded remux subset: one 48 kHz family-0 Opus track, contiguous
+    /// timestamps starting at zero, no lacing, and positive end-only discard.
+    /// Unsupported timelines fail rather than concatenating across a capture gap.
+    public static func stream(
+        from descriptor: Int32,
+        checkCancellation: @escaping () throws -> Void = { try Task.checkCancellation() },
+        onHeader: (WebMOpusStreamInfo) throws -> Void,
+        onPacket: @escaping (Data, UInt32) throws -> Void
+    ) throws -> WebMOpusStreamSummary {
+        let source = try WebMByteSource(descriptor: descriptor, checkCancellation: checkCancellation)
+        var cursor = EBMLCursor(source: source)
+        let header = try cursor.readElementHeader()
+        guard header.id == ElementID.ebml.rawValue, let headerEnd = header.contentEnd else {
+            throw WebMOpusReaderError.invalidEBMLHeader
+        }
+        try readEBMLHeader(cursor: &cursor, end: headerEnd)
+        let segment = try cursor.readElementHeader()
+        guard segment.id == ElementID.segment.rawValue else { throw WebMOpusReaderError.missingSegment }
+        let end = segment.contentEnd ?? source.count
+        guard end == source.count else { throw WebMOpusReaderError.malformedElement("Trailing data after Segment") }
+        var selected: Track?
+        var info: WebMOpusStreamInfo?
+        var timestampScale: UInt64 = 1_000_000
+        var sawInfo = false
+        var packets = 0
+        var frames: Int64 = 0
+        var remainder: UInt32 = 0
+        while cursor.offset < end {
+            let element = try cursor.readElementHeader(limit: end)
+            switch element.id {
+            case 0x1549A966: // Info
+                guard !sawInfo, packets == 0, let infoEnd = element.contentEnd else {
+                    throw WebMOpusReaderError.unsupportedTiming("Info must occur once before audio")
+                }
+                sawInfo = true
+                var sawScale = false
+                while cursor.offset < infoEnd {
+                    let child = try cursor.readElementHeader(limit: infoEnd)
+                    guard let childEnd = child.contentEnd else { throw WebMOpusReaderError.malformedElement("Unknown-size Info child") }
+                    if child.id == 0x2AD7B1 {
+                        guard !sawScale else { throw WebMOpusReaderError.unsupportedTiming("Duplicate TimestampScale") }
+                        sawScale = true
+                        timestampScale = try cursor.readUnsignedInteger(until: childEnd)
+                        guard (1...1_000_000).contains(timestampScale) else {
+                            throw WebMOpusReaderError.unsupportedTiming("TimestampScale must not exceed 1 ms")
+                        }
+                    } else { cursor.offset = childEnd }
+                }
+            case ElementID.tracks.rawValue:
+                guard selected == nil, packets == 0, let tracksEnd = element.contentEnd else {
+                    throw WebMOpusReaderError.malformedElement("Tracks must occur once before audio")
+                }
+                var tracks: [Track] = []
+                try readTracks(cursor: &cursor, end: tracksEnd, tracks: &tracks)
+                guard tracks.count == 1 else { throw WebMOpusReaderError.multipleOpusTracks }
+                let track = tracks[0]
+                guard track.type == 2, track.codecID == "A_OPUS", let number = track.number, number > 0 else {
+                    throw WebMOpusReaderError.missingOpusTrack
+                }
+                guard track.sampleRate == 48_000, track.timestampScale == 1, !track.hasContentEncodings else {
+                    throw WebMOpusReaderError.unsupportedTiming("Requires an unencoded 48 kHz track at scale 1")
+                }
+                guard let cookie = track.codecPrivate, let channels = track.channelCount,
+                      (1...2).contains(channels), cookie.count == 19,
+                      cookie.prefix(8).elementsEqual("OpusHead".utf8), cookie[8] == 1,
+                      cookie[9] == UInt8(channels), cookie[16] == 0, cookie[17] == 0, cookie[18] == 0 else {
+                    throw WebMOpusReaderError.invalidOpusHead
+                }
+                let inputRate = (0..<4).reduce(UInt32(0)) { $0 | UInt32(cookie[12 + $1]) << (8 * $1) }
+                guard inputRate == 0 || inputRate == 48_000 else { throw WebMOpusReaderError.invalidOpusHead }
+                let preSkip = UInt32(cookie[10]) | UInt32(cookie[11]) << 8
+                let delay = Double(preSkip) * 1_000_000_000 / 48_000
+                guard abs(Double(track.codecDelay ?? 0) - delay) <= 1 else {
+                    throw WebMOpusReaderError.unsupportedTiming("CodecDelay does not match Opus pre-skip")
+                }
+                let value = WebMOpusStreamInfo(magicCookie: cookie, channelCount: channels, preSkip: preSkip)
+                selected = track
+                info = value
+                try onHeader(value)
+            case ElementID.cluster.rawValue:
+                guard let selected else { throw WebMOpusReaderError.malformedElement("Tracks must precede Cluster") }
+                var unused: [Block] = []
+                try readCluster(cursor: &cursor, end: element.contentEnd ?? end,
+                    hasUnknownSize: element.contentEnd == nil, blocks: &unused) { clusterTime, block in
+                    try checkCancellation()
+                    guard block.trackNumber == selected.number else { throw WebMOpusReaderError.missingOpusTrack }
+                    guard !block.hasUnsupportedTiming else { throw WebMOpusReaderError.unsupportedTiming("Unsupported block metadata") }
+                    guard block.lacing == .none else { throw WebMOpusReaderError.unsupportedLacing(block.lacing) }
+                    guard remainder == 0 else { throw WebMOpusReaderError.unsupportedTiming("DiscardPadding is not final") }
+                    guard let count = OpusCAFWriter.opusFrameCount(block.payload) else {
+                        throw WebMOpusReaderError.resourceLimit
+                    }
+                    let ticks = Double(clusterTime) + Double(block.relativeTimecode)
+                    let time = ticks * Double(timestampScale)
+                    let expectedTime = Double(frames) * 1_000_000_000 / 48_000
+                    guard ticks >= 0, time <= 86_400_000_000_000,
+                          (packets != 0 || ticks == 0), abs(time - expectedTime) <= Double(timestampScale) else {
+                        throw WebMOpusReaderError.unsupportedTiming("Non-contiguous packet timestamps")
+                    }
+                    if block.discardPadding != 0 {
+                        let discarded = Double(block.discardPadding) * 48_000 / 1_000_000_000
+                        guard discarded > 0, discarded <= Double(count),
+                              abs(discarded - discarded.rounded()) <= 0.0001 else {
+                            throw WebMOpusReaderError.unsupportedTiming("Unsupported DiscardPadding")
+                        }
+                        remainder = UInt32(discarded.rounded())
+                    }
+                    try onPacket(block.payload, count)
+                    packets += 1
+                    frames += Int64(count)
+                }
+            default:
+                try cursor.skip(element, name: "Segment child")
+            }
+        }
+        guard let info, packets > 0, frames > Int64(info.preSkip) + Int64(remainder) else {
+            throw WebMOpusReaderError.emptyInput
+        }
+        return WebMOpusStreamSummary(info: info, packetCount: packets,
+            encodedFrameCount: frames, remainderFrames: remainder)
     }
 }
