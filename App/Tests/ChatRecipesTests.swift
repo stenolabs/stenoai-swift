@@ -150,22 +150,26 @@ struct LibraryChatScopeTests {
         #expect(session.scope == .all)
     }
 
-    @Test("healing drops a deleted folder back to all notes")
+    @Test("healing a deleted folder requires a new explicit selection")
     func healsDeletedFolder() {
         let live = Folder(name: "Live", sortIndex: 0)
         let healed = LibraryChatScope.healed(.folder(live.id), folders: [], meetings: [])
-        #expect(healed == .all)
+        #expect(healed == .meetings([]))
+        #expect(healed.requiresExplicitSelection)
         let kept = LibraryChatScope.healed(.folder(live.id), folders: [live], meetings: [])
         #expect(kept == .folder(live.id))
+        #expect(!kept.requiresExplicitSelection)
     }
 
-    @Test("healing removes deleted meetings and emptiness falls back to all")
+    @Test("healing removes deleted meetings without broadening the scope")
     func healsDeletedMeetings() {
         let survivor = meeting("kept")
         let ghost = MeetingID()
         let healed = LibraryChatScope.healed(.meetings([survivor.id, ghost]), folders: [], meetings: [survivor])
         #expect(healed == .meetings([survivor.id]))
-        #expect(LibraryChatScope.healed(.meetings([ghost]), folders: [], meetings: []) == .all)
+        let emptied = LibraryChatScope.healed(.meetings([ghost]), folders: [], meetings: [])
+        #expect(emptied == .meetings([]))
+        #expect(emptied.requiresExplicitSelection)
         #expect(LibraryChatScope.healed(.all, folders: [], meetings: []) == .all)
     }
 }

@@ -192,7 +192,18 @@ struct LibraryChatView: View {
             errorMessage = String(localized: "The question is too long."); return
         }
         let endpoint = settings.selectedEndpoint
-        let scope = session.scope
+        let scope = LibraryChatScope.healed(
+            session.scope, folders: app.folders, meetings: app.meetings
+        )
+        if scope != session.scope {
+            session.scope = scope
+            if savedSession != nil, !persist() { return }
+        }
+        guard !scope.requiresExplicitSelection else {
+            scopedMeetingIDs = []
+            showMeetings = true
+            return
+        }
         let sessionID = session.id
         isPreparing = true
         preparationGeneration &+= 1

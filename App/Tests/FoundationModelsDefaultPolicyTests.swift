@@ -1,6 +1,6 @@
 import FoundationModels
-import StenoIntelligence
 import Testing
+@testable import StenoIntelligence
 
 @Suite("Apple system language model default policy")
 struct FoundationModelsDefaultPolicyTests {
@@ -18,7 +18,8 @@ struct FoundationModelsDefaultPolicyTests {
     @available(macOS 27.0, *)
     @Test("OS 27 descriptor records the variant selected by SystemLanguageModel.default")
     func descriptorMatchesOSSelectedVariant() {
-        let variant = SystemLanguageModel.default.variant
+        let model = SystemLanguageModel.default
+        let variant = model.variant
         let expected: String
         if variant == .coreAdvanced3 {
             expected = "AFM 3 Core Advanced"
@@ -29,7 +30,10 @@ struct FoundationModelsDefaultPolicyTests {
                 ? "SystemLanguageModel"
                 : variant.displayName
         }
-        #expect(FoundationModelsProvider().descriptor.modelVersion == expected)
+        let descriptor = FoundationModelsProvider.engineDescriptor(
+            for: FoundationModelsProvider.systemVariant(for: model)
+        )
+        #expect(descriptor.modelVersion == expected)
     }
     #endif
 }

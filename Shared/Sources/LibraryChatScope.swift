@@ -8,18 +8,26 @@ enum LibraryChatScope: Equatable, Sendable {
     case folder(FolderID)
     case meetings([MeetingID])
 
-    /// Drops dead references: an unknown folder or an empty meeting set
-    /// falls back to `.all`; known-but-deleted meeting ids are filtered out.
+    /// Drops dead references without broadening what the user selected.
+    /// A scope whose last target disappeared becomes an empty explicit
+    /// meeting selection and therefore requires a new user choice.
     static func healed(_ scope: LibraryChatScope, folders: [Folder], meetings: [Meeting]) -> LibraryChatScope {
         switch scope {
         case .all:
             return .all
         case .folder(let folderID):
-            return folders.contains { $0.id == folderID } ? .folder(folderID) : .all
+            return folders.contains { $0.id == folderID } ? .folder(folderID) : .meetings([])
         case .meetings(let ids):
             let liveIDs = Set(meetings.map(\.id))
             let surviving = ids.filter { liveIDs.contains($0) }
-            return surviving.isEmpty ? .all : .meetings(surviving)
+            return .meetings(surviving)
         }
+    }
+
+    var requiresExplicitSelection: Bool {
+        if case .meetings(let ids) = self {
+            return ids.isEmpty
+        }
+        return false
     }
 }

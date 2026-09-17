@@ -444,9 +444,13 @@ struct LibraryChatWindow: View {
         }
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        // The scope is re-resolved (self-healed) and forwarded on EVERY
-        // turn, so deleted folders/meetings can never filter a turn.
+        // Re-resolve the scope on every turn without ever broadening a stale
+        // selection to the whole library.
         let scope = chat.healedScope(appModel: model)
+        guard !scope.requiresExplicitSelection else {
+            showMeetingScopePicker = true
+            return
+        }
         // Outbound disclosure before the first external send per session,
         // mirroring the live Ask bar. Apple Foundation Models stays silent.
         let endpoint = textModelSettings.selectedEndpoint

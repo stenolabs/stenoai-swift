@@ -94,6 +94,24 @@ struct IOSParityTests {
         try store.remove(edited)
         #expect(try store.load().isEmpty)
     }
+
+    @Test("stale chat scopes never expand to the whole library")
+    func staleChatScopeRequiresExplicitSelection() {
+        let deletedFolder = FolderID()
+        let deletedMeeting = MeetingID()
+
+        let folderScope = LibraryChatScope.healed(
+            .folder(deletedFolder), folders: [], meetings: []
+        )
+        let meetingScope = LibraryChatScope.healed(
+            .meetings([deletedMeeting]), folders: [], meetings: []
+        )
+
+        #expect(folderScope == .meetings([]))
+        #expect(meetingScope == .meetings([]))
+        #expect(folderScope.requiresExplicitSelection)
+        #expect(meetingScope.requiresExplicitSelection)
+    }
 }
 
 @MainActor
