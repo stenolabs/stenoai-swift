@@ -133,6 +133,7 @@ targets:
     supportedDestinations: [iOS, iPadOS]
     sources:
       - App/Tests
+      - ../Shared/Tests
     dependencies:
       - target: Steno
     settings:

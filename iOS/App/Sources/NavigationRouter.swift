@@ -9,7 +9,7 @@ import StenoDomain
 @MainActor
 @Observable
 final class NavigationRouter {
-    var selection: SidebarItem? = .recording
+    var selection: SidebarItem? = .home
     var isInspectorPresented = false
     var meetingActionAlert: MeetingActionAlert?
     private(set) var transcriptSearchFocusRequest: UInt64 = 0
@@ -27,7 +27,7 @@ final class NavigationRouter {
         guard let selectedMeetingID,
               removedMeetingIDs.contains(selectedMeetingID)
         else { return }
-        select(.recording)
+        select(.home)
     }
 
     /// Applies an asynchronous deletion result to this window without
@@ -37,7 +37,7 @@ final class NavigationRouter {
         cleanupWarning: String?
     ) {
         if selectedMeetingID == meetingID {
-            select(.recording)
+            select(.home)
         }
         if let cleanupWarning {
             meetingActionAlert = .cleanupWarning(cleanupWarning)

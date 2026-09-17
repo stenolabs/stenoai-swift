@@ -224,7 +224,7 @@ struct StorageLocationTests {
         let root = try TemporaryDirectory()
         defer { root.cleanUp() }
         let defaults = try makeDefaults()
-        let form = LibraryLocationForm(defaults: defaults)
+        let form = LibraryLocationForm(defaults: defaults, environment: [:])
 
         form.choose(url: root.url.appendingPathComponent("chosen"))
 
@@ -242,6 +242,20 @@ struct StorageLocationTests {
 
         #expect(!form.hasCustomPath)
         #expect(StorageLocation.customPath(defaults: defaults) == nil)
+    }
+
+    @Test("the form displays an explicit library override without changing the saved choice")
+    @MainActor
+    func displayRespectsEnvironmentOverride() throws {
+        let root = try TemporaryDirectory()
+        defer { root.cleanUp() }
+        let defaults = try makeDefaults()
+        let override = root.url.appendingPathComponent("isolated-library").path
+        let form = LibraryLocationForm(defaults: defaults,
+            environment: [StorageLocation.environmentOverrideKey: override])
+        form.choose(url: root.url.appendingPathComponent("chosen"))
+        #expect(form.displayPath == override)
+        #expect(StorageLocation.customPath(defaults: defaults) == root.url.appendingPathComponent("chosen").path)
     }
 }
 

@@ -124,26 +124,6 @@ struct MeetingSidebarView: View {
                   context.availability.canMoveToTrash else { return }
             context.moveToTrash()
         }
-        .toolbar(id: MacToolbarID.sidebar.rawValue) {
-            ToolbarItem(
-                id: MacToolbarItemID.newFolder.rawValue,
-                placement: .primaryAction
-            ) {
-                Button {
-                    beginCreatingFolder(parentFolderID: nil)
-                } label: {
-                    Label("New folder", systemImage: "folder.badge.plus")
-                }
-                .help("Create a folder")
-                .disabled(model.runtime == nil)
-            }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .newFolder,
-                    in: .sidebar
-                )
-            )
-        }
         .navigationTitle(MacWindowPresentation.meetingsTitle)
         .searchable(
             text: $query,

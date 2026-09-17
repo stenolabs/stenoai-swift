@@ -237,11 +237,14 @@ struct LibraryLocationSection: View {
 @Observable
 final class LibraryLocationForm {
     private let defaults: UserDefaults
+    private let environment: [String: String]
 
     var validationFailure: StorageLocation.ValidationFailure?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         environment: [String: String] = ProcessInfo.processInfo.environment) {
         self.defaults = defaults
+        self.environment = environment
     }
 
     /// True while a custom path overrides the standard location.
@@ -253,7 +256,7 @@ final class LibraryLocationForm {
     /// users can see where their data lives even when an environment
     /// override is in play.
     var displayPath: String {
-        StorageLocation.effectiveLibraryDirectory(defaults: defaults).path
+        StorageLocation.effectiveLibraryDirectory(defaults: defaults, environment: environment).path
     }
 
     /// Validates the picked directory before persisting it; an invalid pick

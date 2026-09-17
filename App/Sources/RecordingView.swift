@@ -52,10 +52,6 @@ struct RecordingView: View {
             Divider()
             transcript
         }
-        // Mitschreiben waehrend der Aufnahme ist der Hauptfall fuer Notizen,
-        // nicht die Ausnahme.
-        .frame(minWidth: 560)
-        .preference(key: MainDetailMinimumWidthKey.self, value: showNotes ? 560 + 260 + 1 : 560)
         .inspector(isPresented: $showNotes) {
             Group {
                 if let meetingID = model.recordingMeetingID {
@@ -72,23 +68,6 @@ struct RecordingView: View {
         .overlay(alignment: .bottom) {
             AskBarView(isVisible: $isAskBarVisible)
         }
-        .toolbar(id: MacToolbarID.recording.rawValue) {
-            ToolbarItem(
-                id: MacToolbarItemID.recordingNotes.rawValue,
-                placement: .primaryAction
-            ) {
-                Toggle(isOn: $showNotes) {
-                    Label("Notes", systemImage: "square.and.pencil")
-                }
-                .help("Take notes while recording")
-            }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .recordingNotes,
-                    in: .recording
-                )
-            )
-        }
     }
 
     private var header: some View {
@@ -96,18 +75,27 @@ struct RecordingView: View {
             status: model.microphoneStatus
         )
         return VStack(alignment: .leading, spacing: 10) {
-            // Timer and levels live in the persistent recording strip.
-            if let title = microphone.actionTitle,
-               let icon = microphone.actionIcon {
-                Button {
-                    Task {
-                        await model.setMicrophonePaused(!microphone.isPaused)
+            HStack {
+                // Timer and levels live in the persistent recording strip.
+                if let title = microphone.actionTitle,
+                   let icon = microphone.actionIcon {
+                    Button {
+                        Task {
+                            await model.setMicrophonePaused(!microphone.isPaused)
+                        }
+                    } label: {
+                        Label(title, systemImage: icon)
                     }
-                } label: {
-                    Label(title, systemImage: icon)
+                    .buttonStyle(.borderless)
+                    .help(title)
                 }
-                .buttonStyle(.borderless)
-                .help(title)
+                Spacer()
+                Toggle(isOn: $showNotes) {
+                    Label("Notes", systemImage: "square.and.pencil")
+                }
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .help("Take notes while recording")
             }
             if let warning = microphone.warning {
                 Label(warning, systemImage: "mic.slash")

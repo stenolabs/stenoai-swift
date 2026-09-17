@@ -11,104 +11,6 @@ extension Notification.Name {
     )
 }
 
-/// One persisted chat turn in a library chat session.
-struct LibraryChatMessage: Codable, Equatable, Identifiable, Sendable {
-    enum Role: String, Codable, Sendable {
-        case user
-        case assistant
-    }
-
-    var id: UUID
-    var role: Role
-    var text: String
-    var createdAt: Date
-
-    init(id: UUID = UUID(), role: Role, text: String, createdAt: Date = Date()) {
-        self.id = id
-        self.role = role
-        self.text = text
-        self.createdAt = createdAt
-    }
-}
-
-/// One named conversation over the whole meeting library. Sessions persist
-/// as a JSON array under `steno.chat.sessions` in defaults; the messages
-/// stay local to this Mac like every other note content.
-struct LibraryChatSession: Codable, Equatable, Identifiable, Sendable {
-    var id: UUID
-    var title: String
-    var createdAt: Date
-    var messages: [LibraryChatMessage]
-    /// What this conversation asks across. Sessions written before scoping
-    /// existed decode as `.all`.
-    var scope: LibraryChatScope = .all
-
-    init(
-        id: UUID = UUID(),
-        title: String,
-        createdAt: Date = Date(),
-        messages: [LibraryChatMessage] = [],
-        scope: LibraryChatScope = .all
-    ) {
-        self.id = id
-        self.title = title
-        self.createdAt = createdAt
-        self.messages = messages
-        self.scope = scope
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, title, createdAt, messages, scope
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        title = try container.decode(String.self, forKey: .title)
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
-        messages = try container.decode([LibraryChatMessage].self, forKey: .messages)
-        scope = try container.decodeIfPresent(LibraryChatScope.self, forKey: .scope) ?? .all
-    }
-}
-
-/// Cross-note ask scope for one Library Chat turn: the whole library, a
-/// single folder, or an explicit set of (non-live) meetings.
-extension LibraryChatScope: Codable {
-    private enum CodingKeys: String, CodingKey {
-        case kind, folderID, meetingIDs
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        switch try container.decode(String.self, forKey: .kind) {
-        case "all": self = .all
-        case "folder":
-            self = .folder(try container.decode(FolderID.self, forKey: .folderID))
-        case "meetings":
-            self = .meetings(try container.decode([MeetingID].self, forKey: .meetingIDs))
-        case let other:
-            throw DecodingError.dataCorruptedError(
-                forKey: .kind, in: container,
-                debugDescription: "Unknown chat scope kind \(other)"
-            )
-        }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        switch self {
-        case .all:
-            try container.encode("all", forKey: .kind)
-        case .folder(let folderID):
-            try container.encode("folder", forKey: .kind)
-            try container.encode(folderID, forKey: .folderID)
-        case .meetings(let ids):
-            try container.encode("meetings", forKey: .kind)
-            try container.encode(ids, forKey: .meetingIDs)
-        }
-    }
-}
-
 /// Loads and stores the session list. A missing key yields an empty list;
 /// undecodable data is treated as absent rather than fatal - the window then
 /// starts fresh instead of blocking the whole app on one bad blob. Content
@@ -133,167 +35,6 @@ struct LibraryChatSessionStore {
     func save(_ sessions: [LibraryChatSession]) {
         guard let data = try? JSONEncoder().encode(sessions) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
-    }
-}
-
-/// Runs library chat turns against the selected text model.
-///
-/// Transport guarantees ported from `LiveQueryService`:
-/// - exactly one turn in flight; a new message or an explicit cancel owns
-///   and cancels the previous run,
-/// - the prompt comes from `LibraryChatContextBuilder` (newest-first,
-///   capped cross-meeting corpus),
-/// - errors surface as fixed, sanitized messages; source texts, questions
-///   and answers are never logged anywhere.
-///
-/// A monotonically increasing generation guards every phase write so a run
-/// displaced by a newer message cannot clobber the newer run's state.
-@MainActor
-@Observable
-final class LibraryChatService {
-    enum Phase: Equatable {
-        case idle
-        case asking
-        /// The answer accumulated so far; each chunk is appended verbatim.
-        case answering(String)
-        case failed(String)
-    }
-
-    private(set) var phase: Phase = .idle
-
-    /// Called once per finished run with the complete answer, or `nil` when
-    /// the run failed or was cancelled. Lets the owner commit the turn into
-    /// the persisted session.
-    var onFinish: (@MainActor (String?) -> Void)?
-
-    private var task: Task<Void, Never>?
-    private var generation = 0
-
-    private let builder = LibraryChatContextBuilder()
-    private let makeAnswerer: @MainActor () throws -> any LiveQueryAnswering
-
-    init(makeAnswerer: @escaping @MainActor () throws -> any LiveQueryAnswering) {
-        self.makeAnswerer = makeAnswerer
-    }
-
-    /// True while a message is being answered or streamed.
-    var isActive: Bool { task != nil }
-
-    var canSend: Bool { !isActive }
-
-    /// Starts a new turn. Any running turn is cancelled first: single
-    /// in-flight by construction.
-    func ask(message: String, sources: [LibraryChatMeetingSource]) {
-        cancel()
-
-        let prompt: LiveQueryPrompt
-        do {
-            prompt = try builder.assemble(message: message, sources: sources)
-        } catch let error as LibraryChatPromptError {
-            phase = .failed(error.errorDescription ?? "The message could not be prepared.")
-            onFinish?(nil)
-            return
-        } catch {
-            phase = .failed("The message could not be prepared.")
-            onFinish?(nil)
-            return
-        }
-        let answerer: any LiveQueryAnswering
-        do {
-            answerer = try makeAnswerer()
-        } catch {
-            phase = .failed(fixedMessage(for: error))
-            onFinish?(nil)
-            return
-        }
-
-        generation += 1
-        let currentGeneration = generation
-        phase = .asking
-        task = Task { [weak self] in
-            await self?.run(
-                answerer: answerer,
-                prompt: prompt,
-                generation: currentGeneration
-            )
-        }
-    }
-
-    /// Owner-bound cancellation: closing the window cancels the in-flight
-    /// request without leaving an error behind.
-    func cancel() {
-        let wasActive = task != nil
-        task?.cancel()
-        task = nil
-        if wasActive {
-            generation += 1
-            phase = .idle
-            onFinish?(nil)
-        }
-    }
-
-    private func setPhase(_ newValue: Phase, generation runGeneration: Int) {
-        guard runGeneration == generation else { return }
-        phase = newValue
-    }
-
-    private func finishRun(generation runGeneration: Int) {
-        guard runGeneration == generation else { return }
-        task = nil
-    }
-
-    private func run(
-        answerer: any LiveQueryAnswering,
-        prompt: LiveQueryPrompt,
-        generation runGeneration: Int
-    ) async {
-        var answer = ""
-        setPhase(.answering(answer), generation: runGeneration)
-        let stream = answerer.stream(
-            systemInstructions: prompt.systemInstructions,
-            userPrompt: prompt.userPrompt
-        )
-        do {
-            for try await chunk in stream {
-                try Task.checkCancellation()
-                answer += chunk
-                // Documented cap (`LibraryChatLimits.maximumAnswerBytes`):
-                // refuse instead of surfacing an unbounded answer.
-                guard answer.utf8.count <= LibraryChatLimits.maximumAnswerBytes else {
-                    throw LiveQueryTransportError.responseTooLarge
-                }
-                setPhase(.answering(answer), generation: runGeneration)
-            }
-            finishRun(generation: runGeneration)
-            if answer.isEmpty {
-                setPhase(
-                    .failed(LiveQueryTransportError.invalidResponse.errorDescription ?? ""),
-                    generation: runGeneration
-                )
-                onFinish?(nil)
-            } else {
-                setPhase(.answering(answer), generation: runGeneration)
-                onFinish?(answer)
-            }
-        } catch is CancellationError {
-            setPhase(.idle, generation: runGeneration)
-            onFinish?(nil)
-        } catch {
-            setPhase(.failed(fixedMessage(for: error)), generation: runGeneration)
-            onFinish?(nil)
-        }
-    }
-
-    /// Maps every failure to a fixed sentence. Deliberately loses error
-    /// detail: provider messages can echo request content, and source,
-    /// question or answer text must never reach the UI log.
-    private func fixedMessage(for error: Error) -> String {
-        switch error as? LiveQueryTransportError {
-        case .some(let known):
-            known.errorDescription ?? "The model could not answer right now."
-        case .none:
-            "The model could not answer right now."
-        }
     }
 }
 
@@ -443,38 +184,9 @@ final class LibraryChatModel {
     /// chronological; the builder re-sorts deterministically regardless.
     func collectSources(appModel: AppModel, scope: LibraryChatScope) async -> [LibraryChatMeetingSource] {
         guard let runtime = appModel.runtime else { return [] }
-        let layout = runtime.library.layout
-        let notesStore = MeetingNotesStore(layout: layout)
-        let reportStore = TemplateResultStore(layout: layout)
-        let scopedMeetings: [Meeting]
-        switch scope {
-        case .all:
-            scopedMeetings = appModel.meetings.filter { $0.status != .recording }
-        case .folder(let folderID):
-            scopedMeetings = appModel.meetings.filter {
-                $0.folderID == folderID && $0.status != .recording
-            }
-        case .meetings(let ids):
-            let wanted = Set(ids)
-            scopedMeetings = appModel.meetings.filter {
-                wanted.contains($0.id) && $0.status != .recording
-            }
-        }
-        var sources: [LibraryChatMeetingSource] = []
-        for meeting in scopedMeetings {
-            let notes = try? await notesStore.notes(meeting.id)
-            let reports = (try? reportStore.listWithRepairOutcome(meetingID: meeting.id))?.results ?? []
-            let latestMarkdown = reports
-                .max { $0.result.createdAt < $1.result.createdAt }?
-                .result.markdown
-            sources.append(LibraryChatMeetingSource(
-                title: meeting.title,
-                createdAt: meeting.createdAt,
-                userNotes: notes,
-                reportMarkdown: latestMarkdown
-            ))
-        }
-        return sources
+        return (try? await LibraryChatSourceCollector.collect(
+            library: runtime.library, meetings: appModel.meetings, scope: scope, requiresCompleteSources: false
+        )) ?? []
     }
 }
 /// Provider resolution mirrors the live Ask bar exactly: Apple Foundation
@@ -732,9 +444,13 @@ struct LibraryChatWindow: View {
         }
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        // The scope is re-resolved (self-healed) and forwarded on EVERY
-        // turn, so deleted folders/meetings can never filter a turn.
+        // Re-resolve the scope on every turn without ever broadening a stale
+        // selection to the whole library.
         let scope = chat.healedScope(appModel: model)
+        guard !scope.requiresExplicitSelection else {
+            showMeetingScopePicker = true
+            return
+        }
         // Outbound disclosure before the first external send per session,
         // mirroring the live Ask bar. Apple Foundation Models stays silent.
         let endpoint = textModelSettings.selectedEndpoint

@@ -4,6 +4,22 @@ import Testing
 
 @Suite("Meeting notes session pool")
 struct MeetingNotesSessionPoolTests {
+    @Test("restoration opens a fresh session while the removed editor stays disabled")
+    @MainActor
+    func restoresFreshSession() async throws {
+        let id = MeetingID()
+        let pool = MeetingNotesSessionPool(store: PoolNotesPersistence())
+        let original = try #require(await pool.session(for: id))
+        try await pool.prepareForMeetingRemoval(id)
+        pool.completeMeetingRemoval(id)
+        #expect(await pool.session(for: id) == nil)
+        pool.completeMeetingRestoration(id)
+        let restored = try #require(await pool.session(for: id))
+        #expect(restored !== original)
+        #expect(restored.canEdit)
+        #expect(!original.canEdit)
+    }
+
     @Test("removal preparation blocks the first later session acquisition")
     @MainActor
     func preparationBlocksFirstLaterSessionAcquisition() async throws {

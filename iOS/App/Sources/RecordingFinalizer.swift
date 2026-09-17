@@ -16,6 +16,7 @@ actor RecordingFinalizer {
     func finalize(
         meeting: Meeting,
         output: TranscriptOutput?,
+        recordedDuration: TimeInterval? = nil,
         library: Library,
         jobStore: JobStore
     ) async throws {
@@ -30,7 +31,7 @@ actor RecordingFinalizer {
 
         let work = prepared[meetingID] ?? Self.prepare(
             meeting: meeting,
-            output: output
+            output: recordedDuration.map(ShortRecordingDecision.requiresConfirmation) == true ? nil : output
         )
         prepared[meetingID] = work
 
@@ -38,7 +39,15 @@ actor RecordingFinalizer {
             if let revision = work.revision {
                 try await Self.persist(revision, in: library)
             }
-            try await Self.persist(work.job, in: jobStore)
+            let decisions = ShortRecordingDecisionStore(layout: library.layout)
+            if let recordedDuration, ShortRecordingDecision.requiresConfirmation(duration: recordedDuration) {
+                try decisions.save(ShortRecordingDecision(
+                    job: work.job, duration: recordedDuration, continuesExistingMeeting: false
+                ))
+            } else {
+                try await Self.persist(work.job, in: jobStore)
+                try decisions.remove(meetingID)
+            }
         }
         inFlight[meetingID] = task
 

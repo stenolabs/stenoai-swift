@@ -123,31 +123,48 @@ struct LocalizationCatalogTests {
     }
 
     private func expectGermanTranslations(in catalog: StringCatalog) {
-        for (key, entry) in catalog.strings where entry.shouldTranslate != false {
-            let german = entry.localizations["de"]?.stringUnit
-            #expect(
-                german?.state == "translated",
-                "Missing translated German value for \(key)"
-            )
-            #expect(
-                !(german?.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
-                "German value is empty for \(key)"
-            )
-        }
+        expectTranslations(in: catalog, language: "de", requiredPluralForms: ["one", "other"])
     }
 
     private func expectTraditionalChineseTranslations(in catalog: StringCatalog) {
+        expectTranslations(in: catalog, language: "zh-Hant", requiredPluralForms: ["other"])
+    }
+
+    private func expectTranslations(
+        in catalog: StringCatalog,
+        language: String,
+        requiredPluralForms: Set<String>
+    ) {
         for (key, entry) in catalog.strings where entry.shouldTranslate != false {
-            let zhHant = entry.localizations["zh-Hant"]?.stringUnit
-            #expect(
-                zhHant?.state == "translated",
-                "Missing translated Traditional Chinese value for \(key)"
-            )
-            #expect(
-                !(zhHant?.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
-                "Traditional Chinese value is empty for \(key)"
-            )
+            let localization = entry.localizations[language]
+            let units: [StringCatalogStringUnit]
+            if let plural = localization?.variations?.plural {
+                #expect(requiredPluralForms.isSubset(of: Set(plural.keys)),
+                        "Missing \(language) plural forms for \(key)")
+                #expect(plural.values.allSatisfy { $0.stringUnit != nil },
+                        "Missing \(language) plural value for \(key)")
+                units = plural.values.compactMap(\.stringUnit)
+            } else {
+                units = [localization?.stringUnit].compactMap { $0 }
+            }
+            #expect(!units.isEmpty, "Missing \(language) translation for \(key)")
+            for unit in units {
+                #expect(unit.state == "translated", "Untranslated \(language) value for \(key)")
+                #expect(!unit.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        "Empty \(language) value for \(key)")
+            }
         }
+    }
+
+    @Test("meeting counts use singular and plural translations")
+    func meetingCountsUseLocalizedPlurals() {
+        let german = Locale(identifier: "de")
+        let one = 1
+        let two = 2
+        #expect(localized("\(one) selected meetings", locale: german) == "1 ausgewähltes Meeting")
+        #expect(localized("\(two) selected meetings", locale: german) == "2 ausgewählte Meetings")
+        #expect(localized("\(one) turns", locale: german) == "1 Redebeitrag")
+        #expect(localized("\(two) turns", locale: german) == "2 Redebeiträge")
     }
     private func catalog(named name: String) throws -> StringCatalog {
         let resources = URL(fileURLWithPath: #filePath)
@@ -194,6 +211,15 @@ private struct StringCatalogEntry: Decodable {
 }
 
 private struct StringCatalogLocalization: Decodable {
+    let stringUnit: StringCatalogStringUnit?
+    let variations: StringCatalogVariations?
+}
+
+private struct StringCatalogVariations: Decodable {
+    let plural: [String: StringCatalogPluralForm]?
+}
+
+private struct StringCatalogPluralForm: Decodable {
     let stringUnit: StringCatalogStringUnit?
 }
 

@@ -21,6 +21,7 @@ struct MeetingDetailView: View {
     let router: NavigationRouter
     var showAudioReadiness: () -> Void = {}
 
+    @State private var showBrief = false
     @State private var revision: TranscriptRevision?
     @State private var speakerPresentationContext = SpeakerPresentationContext.empty
     @State private var duration: TimeInterval?
@@ -63,6 +64,10 @@ struct MeetingDetailView: View {
         @Bindable var router = router
 
         actionPresentationContent
+        .sheet(isPresented: $showBrief) { MeetingBriefView(meetingID: meetingID) }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ShortRecordingBanner(meetingID: meetingID)
+        }
         .inspector(isPresented: $router.isInspectorPresented) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -103,10 +108,9 @@ struct MeetingDetailView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        if sizeClass != .compact {
+                            Button("Prepare brief…", systemImage: "sparkles") { showBrief = true }
+                                .disabled(app.recording.isActive)
                         }
                         Button {
                             router.toggleInspector()
@@ -122,7 +126,7 @@ struct MeetingDetailView: View {
                                 : "Shows meeting notes, participants, and speaker review."
                         )
                         .accessibilityIdentifier("meeting-inspector-toggle")
-                        if MeetingPresentation.canShareMeeting(status: currentMeeting?.status) {
+                        if sizeClass != .compact, MeetingPresentation.canShareMeeting(status: currentMeeting?.status) {
                             Button {
                                 isShowingMeetingTransfer = true
                             } label: {
@@ -139,6 +143,9 @@ struct MeetingDetailView: View {
                             canDelete: MeetingActionPolicy.canDelete(
                                 status: currentMeeting?.status
                             ),
+                            prepareBrief: sizeClass == .compact && !app.recording.isActive ? { showBrief = true } : nil,
+                            share: sizeClass == .compact && MeetingPresentation.canShareMeeting(status: currentMeeting?.status)
+                                ? { isShowingMeetingTransfer = true } : nil,
                             move: { folderID in
                                 Task {
                                     _ = await app.moveMeeting(meetingID, to: folderID)
@@ -166,7 +173,7 @@ struct MeetingDetailView: View {
             navigationContent
                 .searchable(
                     text: $query,
-                    placement: .navigationBarDrawer(displayMode: .automatic),
+                    placement: .automatic,
                     prompt: "Find in transcript"
                 )
                 .searchFocused($transcriptSearchIsFocused)
@@ -279,6 +286,15 @@ struct MeetingDetailView: View {
 
     private var detailList: some View {
         List {
+            if let currentMeeting {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(currentMeeting.title).font(.title2.bold())
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+                    }
+                }
+            }
             failedParakeetSection
             MeetingReportsSection(
                 meetingID: meetingID,
@@ -464,7 +480,7 @@ struct MeetingDetailView: View {
         var parts: [String] = []
         if let duration { parts.append(durationText(duration)) }
         if let count = revision?.turns.count, count > 0 {
-            parts.append("\(count) turns")
+            parts.append(String(localized: "\(count) turns"))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -878,12 +894,21 @@ private struct MeetingActionsMenu: View {
     let movePolicy: IOSSidebarMeetingActionPolicy
     let canRetranscribe: Bool
     let canDelete: Bool
+    let prepareBrief: (() -> Void)?
+    let share: (() -> Void)?
     let move: (FolderID?) -> Void
     let retranscribe: () -> Void
     let delete: () -> Void
 
     var body: some View {
         Menu {
+            if let prepareBrief {
+                Button("Prepare brief…", systemImage: "sparkles", action: prepareBrief)
+            }
+            if let share {
+                Button("Share meeting", systemImage: "square.and.arrow.up", action: share)
+            }
+            if prepareBrief != nil || share != nil { Divider() }
             Menu("Move to Folder", systemImage: "folder") {
                 IOSMeetingMoveActions(policy: movePolicy, move: move)
             }
@@ -1038,7 +1063,7 @@ enum MeetingActionCopy {
     )
     static let deletionMessage = LocalizedStringResource(
         "meeting.deletion.message",
-        defaultValue: "The entire meeting folder, including its original recording, transcript revisions, notes, and reports, moves to the system Trash. Steno has no in-app restore."
+        defaultValue: "The entire meeting folder, including its original recording, transcript revisions, notes, and reports, moves to the system Trash. Use Undo to restore it while Steno remains open, if the system provides a recoverable Trash location."
     )
     static let deletionConfirmationLabel: LocalizedStringResource = "Move to Trash"
     static let retranscriptionFailureTitle: LocalizedStringResource =
@@ -1182,7 +1207,7 @@ enum MeetingPresentation {
             return MeetingEmptyState(
                 title: "No transcript yet",
                 systemImage: "text.quote",
-                description: "Audio saved. No transcript yet. If the speech model is missing, install it under Audio readiness. Steno retries automatically."
+                description: "Your audio is saved. You can start transcription from the meeting actions when you are ready."
             )
         }
         return MeetingEmptyState(

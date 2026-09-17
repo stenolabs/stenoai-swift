@@ -91,6 +91,231 @@ struct WindowLayoutTests {
             )
         }
     }
+
+    @Test("sidebar header remains visible at the minimum window size")
+    func sidebarHeaderKeepsItsHeight() throws {
+        let probe = SidebarHeaderLayoutProbe()
+        let host = NSHostingView(
+            rootView: SidebarHeaderVisibilityFixture(probe: probe)
+        )
+        host.setFrameSize(NSSize(width: 980, height: 560))
+        host.layoutSubtreeIfNeeded()
+
+        let headerView = try #require(probe.view)
+        #expect(headerView.frame.height >= 119)
+    }
+
+    @Test("inspector visibility does not change the window minimum size")
+    func inspectorKeepsWindowMinimumSizeStable() async throws {
+        let proposed = NSSize(width: 1_240, height: 780)
+        let controller = NSHostingController(
+            rootView: WindowRootSizingFixture(showsInspector: false)
+        )
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: proposed),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+
+        for _ in 0..<5 {
+            try await Task.sleep(for: .milliseconds(20))
+            window.layoutIfNeeded()
+        }
+        let closedMinimum = window.contentMinSize
+
+        controller.rootView = WindowRootSizingFixture(showsInspector: true)
+        for _ in 0..<5 {
+            try await Task.sleep(for: .milliseconds(20))
+            window.layoutIfNeeded()
+        }
+        let openMinimum = window.contentMinSize
+
+        #expect(closedMinimum == MacWindowPresentation.minimumContentSize)
+        #expect(openMinimum == closedMinimum)
+    }
+
+    @Test("selecting and deleting meetings completes the window transitions")
+    func meetingSelectionTransitionsComplete() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "Steno-DeleteWindowTransitionTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let libraryURL = root.appendingPathComponent("Library", isDirectory: true)
+        let modelURL = root.appendingPathComponent("Models", isDirectory: true)
+        let trashURL = root.appendingPathComponent("Trash", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: trashURL,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = AppModel(
+            meetingTrasher: { library, meetingID in
+                let source = library.layout.meetingDirectory(meetingID)
+                let destination = trashURL.appendingPathComponent(
+                    meetingID.description,
+                    isDirectory: true
+                )
+                try FileManager.default.moveItem(at: source, to: destination)
+                return destination
+            },
+            libraryURL: libraryURL,
+            modelCacheDirectoryOverride: modelURL
+        )
+        await model.bootstrap()
+        let runtime = try #require(model.runtime)
+
+        let controller = NSHostingController(
+            rootView: ContentView()
+                .environment(model)
+                .environment(TextModelSettings())
+                .environment(OperatorProfile.shared)
+                .environment(OnboardingModel())
+        )
+        controller.sizingOptions = [.minSize]
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 1_240, height: 780)),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.toolbar = NSToolbar(identifier: "SyntheticMeetingSelectionToolbar")
+        window.contentViewController = controller
+        window.setContentSize(NSSize(width: 1_240, height: 780))
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+
+        let firstDraft = try await runtime.library.createMeeting(
+            title: "Synthetic draft A",
+            status: .draft
+        )
+        let secondDraft = try await runtime.library.createMeeting(
+            title: "Synthetic draft B",
+            status: .draft
+        )
+        await model.refreshMeetings()
+
+        // Exercise the reported path directly: replace one detail while its
+        // automatically opened inspector is present, then let the next detail
+        // load and open its own inspector.
+        for iteration in 0..<12 {
+            let selected = iteration.isMultiple(of: 2) ? firstDraft.id : secondDraft.id
+            model.selectedMeetingIDs = [selected]
+            for _ in 0..<15 {
+                try await Task.sleep(for: .milliseconds(20))
+                window.layoutIfNeeded()
+            }
+            #expect(model.selectedMeetingID == selected)
+        }
+
+        model.selectedMeetingIDs = []
+
+        for iteration in 0..<20 {
+            let meeting = try await runtime.library.createMeeting(
+                title: "Synthetic meeting \(iteration)",
+                status: iteration.isMultiple(of: 2) ? .draft : .ready
+            )
+            await model.refreshMeetings()
+            model.selectedMeetingIDs = [meeting.id]
+
+            for _ in 0..<12 {
+                try await Task.sleep(for: .milliseconds(20))
+                window.layoutIfNeeded()
+            }
+
+            await model.deleteMeeting(meeting.id)
+
+            for _ in 0..<12 {
+                try await Task.sleep(for: .milliseconds(20))
+                window.layoutIfNeeded()
+            }
+
+            #expect(model.selectedMeetingIDs.isEmpty)
+            #expect(!model.meetings.contains(where: { $0.id == meeting.id }))
+            #expect(model.pendingTrashUndo != nil)
+        }
+
+        await model.stopBackgroundLibraryTasksForTesting()
+        await model.runtime?.coordinator.stop()
+    }
+}
+
+private struct WindowRootSizingFixture: View {
+    let showsInspector: Bool
+
+    var body: some View {
+        NavigationSplitView {
+            WindowStableSidebar {
+                Color.clear.frame(height: 80)
+            } content: {
+                List(0..<5, id: \.self) { index in
+                    Text("Meeting \(index)")
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 320)
+        } detail: {
+            WindowStableDetail {
+                HStack(spacing: 0) {
+                    Text("Meeting detail")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if showsInspector {
+                        Divider()
+                        Text("Meeting inspector")
+                            .frame(width: 360)
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .top) { Color.clear.frame(height: 24) }
+        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 24) }
+        .frame(
+            minWidth: MacWindowPresentation.minimumContentSize.width,
+            minHeight: MacWindowPresentation.minimumContentSize.height
+        )
+    }
+}
+
+@MainActor
+private final class SidebarHeaderLayoutProbe {
+    weak var view: NSView?
+}
+
+private struct SidebarHeaderProbeView: NSViewRepresentable {
+    let probe: SidebarHeaderLayoutProbe
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        probe.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+}
+
+private struct SidebarHeaderVisibilityFixture: View {
+    let probe: SidebarHeaderLayoutProbe
+
+    var body: some View {
+        NavigationSplitView {
+            WindowStableSidebar {
+                SidebarHeaderProbeView(probe: probe)
+                    .frame(height: 120)
+            } content: {
+                List(0..<40, id: \.self) { index in
+                    Text("Meeting \(index)")
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 320)
+        } detail: {
+            WindowStableDetail { Color.clear }
+        }
+        .frame(minWidth: 980, minHeight: 560)
+    }
 }
 
 private struct SidebarLayoutFixture: View {

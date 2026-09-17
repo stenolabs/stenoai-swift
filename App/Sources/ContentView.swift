@@ -5,22 +5,11 @@ import UniformTypeIdentifiers
 
 enum MacWindowPresentation {
     static let meetingsTitle: LocalizedStringResource = "Meetings"
-}
-
-/// Carries horizontal requirements across WindowStableDetail without exposing
-/// the scrollable content's ideal height to the window.
-struct MainDetailMinimumWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 560
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
+    static let minimumContentSize = CGSize(width: 980, height: 560)
 }
 
 struct ContentView: View {
-    @State private var detailMinimumWidth: CGFloat = 560
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
@@ -51,135 +40,11 @@ struct ContentView: View {
                     detailContent
                 }
             }
-            .frame(minWidth: detailMinimumWidth)
+            .animation(statusAnimation, value: model.notice)
+            .animation(statusAnimation, value: model.startupState)
         }
-        .onPreferenceChange(MainDetailMinimumWidthKey.self) { detailMinimumWidth = $0 }
         .onChange(of: model.pendingTrashUndo, initial: true) { _, window in
             if window != nil { model.registerTrashUndo(with: undoManager) }
-        }
-        .toolbar(id: MacToolbarID.main.rawValue) {
-            if model.isRecording {
-                ToolbarItem(
-                    id: MacToolbarItemID.recording.rawValue,
-                    placement: .primaryAction
-                ) {
-                    Button {
-                        Task { await model.stopRecording() }
-                    } label: {
-                        Label("Stop recording", systemImage: "stop.circle.fill")
-                            .foregroundStyle(Steno.Colors.recording)
-                    }
-                    .help("Stop recording")
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .recording,
-                        in: .main
-                    )
-                )
-            } else if model.isStartingRecording {
-                ToolbarItem(
-                    id: MacToolbarItemID.recording.rawValue,
-                    placement: .primaryAction
-                ) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .help("Preparing recording")
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .recording,
-                        in: .main
-                    )
-                )
-            } else {
-                ToolbarItem(
-                    id: MacToolbarItemID.microphoneSelection.rawValue,
-                    placement: .primaryAction
-                ) {
-                    MicrophoneSelectionButton()
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .microphoneSelection,
-                        in: .main
-                    )
-                )
-
-                ToolbarItem(
-                    id: MacToolbarItemID.importMeeting.rawValue,
-                    placement: .primaryAction
-                ) {
-                    Menu {
-                        Button {
-                            Task { await model.createDraftMeeting() }
-                        } label: {
-                            Label("New note", systemImage: "square.and.pencil")
-                        }
-                        .disabled(model.runtime == nil)
-                        Divider()
-                        Button("Import Audio File…") {
-                            model.requestAudioImport()
-                        }
-                        Button("Import Meeting Package…") {
-                            model.requestMeetingTransferImport()
-                        }
-                        Button("Import from Legacy Steno App…") {
-                            openWindow(id: "legacy-import")
-                        }
-                    } label: {
-                        Label("Note options", systemImage: "ellipsis.circle")
-                    }
-                    .help("Create a draft or import an existing recording")
-                    .disabled(model.runtime == nil)
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .importMeeting,
-                        in: .main
-                    )
-                )
-
-                ToolbarItem(
-                    id: MacToolbarItemID.newMeeting.rawValue,
-                    placement: .primaryAction
-                ) {
-                    Button {
-                        Task { await model.createDraftMeeting() }
-                    } label: {
-                        Label("New note", systemImage: "square.and.pencil")
-                    }
-                    .disabled(model.runtime == nil)
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .newMeeting,
-                        in: .main
-                    )
-                )
-
-                if model.meetings.first(where: { $0.id == model.selectedMeetingID })?.status != .draft {
-                ToolbarItem(
-                    id: MacToolbarItemID.recording.rawValue,
-                    placement: .primaryAction
-                ) {
-                    Button {
-                        Task { await model.startRecording() }
-                    } label: {
-                        Label("Start Recording", systemImage: "record.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .help("Start a new recording")
-                    .disabled(!model.canStartRecording)
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .recording,
-                        in: .main
-                    )
-                )
-                }
-            }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
@@ -286,10 +151,10 @@ struct ContentView: View {
                         .transition(statusTransition(edge: .bottom))
                 }
             }
+            .animation(statusAnimation, value: model.notice)
+            .animation(statusAnimation, value: model.audioExportActivity)
+            .animation(statusAnimation, value: model.pendingTrashUndo)
         }
-        .animation(statusAnimation, value: model.notice)
-        .animation(statusAnimation, value: model.audioExportActivity)
-        .animation(statusAnimation, value: model.startupState)
         .overlay {
             if model.isCommandPalettePresented {
                 CommandPaletteView(model: model) {
@@ -297,7 +162,10 @@ struct ContentView: View {
                 }
             }
         }
-        .animation(statusAnimation, value: model.pendingTrashUndo)
+        .frame(
+            minWidth: MacWindowPresentation.minimumContentSize.width,
+            minHeight: MacWindowPresentation.minimumContentSize.height
+        )
     }
 
     private var statusMotionPolicy: MacStatusMotionPolicy {

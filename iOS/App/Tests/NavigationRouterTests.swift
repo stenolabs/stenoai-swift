@@ -13,7 +13,7 @@ struct NavigationRouterTests {
         first.selection = .languageModels
 
         #expect(first.selection == .languageModels)
-        #expect(second.selection == .recording)
+        #expect(second.selection == .home)
     }
 
     @Test("routers do not share selection or inspector state")
@@ -89,7 +89,7 @@ struct NavigationRouterTests {
         router.select(.meeting(meetingID))
         router.reconcileSelectedMeeting(removedMeetingIDs: [meetingID])
 
-        #expect(router.selection == .recording)
+        #expect(router.selection == .home)
     }
 
     @Test("a late deletion completion keeps the newer route and publishes its warning")

@@ -105,6 +105,7 @@ final class RecordingModel {
     var canEditAnnotations: Bool { notesSession != nil }
 
     private let audioSession: AudioSessionController
+    private var stoppedRecordingDuration: TimeInterval?
     private let finalizer: RecordingFinalizer
     private let microphonePermissionStatus: @MainActor () -> RecordPermissionStatus
     private let microphonePermissionRequest: @MainActor () async -> RecordPermissionStatus
@@ -380,6 +381,7 @@ final class RecordingModel {
                 try await finalizer.finalize(
                     meeting: meeting,
                     output: output,
+                    recordedDuration: stopFailure == nil && involuntaryStop == nil ? stoppedRecordingDuration : nil,
                     library: runtime.library,
                     jobStore: runtime.jobStore
                 )
@@ -542,9 +544,14 @@ final class RecordingModel {
         // registrierte Originalspur, der Final-ASR-Lauf scheitert spaeter -
         // und mit einem verschluckten Fehler saehe die Aufnahme genau so
         // aus, als waere sie gelungen.
+        stoppedRecordingDuration = nil
         do {
-            if let result = try await session?.stop(), result.stopReason != .requested {
-                involuntaryStop = result.stopReason
+            if let result = try await session?.stop() {
+                if result.stopReason != .requested {
+                    involuntaryStop = result.stopReason
+                } else {
+                    stoppedRecordingDuration = result.assets.values.compactMap(\.duration).max()
+                }
             }
         } catch {
             // Nicht hier melden: `start()` raeumt ueber denselben Weg ab und

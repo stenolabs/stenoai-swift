@@ -1,7 +1,11 @@
 import Foundation
 import StenoIntelligence
 import Testing
+#if os(iOS)
+@testable import Steno
+#else
 @testable import steno_macos
+#endif
 
 @Suite("External send consent")
 struct ExternalSendConsentTests {

@@ -8,6 +8,41 @@ import Testing
 @Suite("iOS app model meeting deletion", .serialized)
 @MainActor
 struct AppModelMeetingDeletionTests {
+    @Test("undo restores original notes without reviving cancelled jobs or old editors")
+    func undoRestoresMeeting() async throws {
+        let fixture = try await MeetingDeletionFixture.make()
+        defer { fixture.remove() }
+        let oldEditor = try #require(await fixture.app.notesSession(for: fixture.meeting.id))
+        oldEditor.update("Synthetic note to preserve")
+        try await fixture.jobStore.enqueue(Job(kind: .finalASR, meetingID: fixture.meeting.id))
+        _ = try await fixture.app.deleteMeeting(fixture.meeting.id)
+        #expect(fixture.app.pendingTrashUndo?.meetingID == fixture.meeting.id)
+        #expect(try await fixture.app.restoreLastTrashedMeeting() == fixture.meeting.id)
+        #expect(fixture.app.pendingTrashUndo == nil)
+        #expect(!fixture.app.removedMeetingIDs.contains(fixture.meeting.id))
+        #expect(try await fixture.jobStore.list().isEmpty)
+        #expect(!oldEditor.canEdit)
+        let restoredEditor = try #require(await fixture.app.notesSession(for: fixture.meeting.id))
+        #expect(restoredEditor !== oldEditor)
+        #expect(restoredEditor.canEdit)
+        #expect(try await MeetingNotesStore(layout: fixture.library.layout).notes(fixture.meeting.id) == "Synthetic note to preserve")
+    }
+
+    @Test("undo refuses an occupied destination and preserves the receipt for retry")
+    func undoDoesNotOverwrite() async throws {
+        let fixture = try await MeetingDeletionFixture.make()
+        defer { fixture.remove() }
+        _ = try await fixture.app.deleteMeeting(fixture.meeting.id)
+        let destination = fixture.library.layout.meetingDirectory(fixture.meeting.id)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        await #expect(throws: CocoaError.self) {
+            _ = try await fixture.app.restoreLastTrashedMeeting()
+        }
+        #expect(fixture.app.pendingTrashUndo != nil)
+        try FileManager.default.removeItem(at: destination)
+        #expect(try await fixture.app.restoreLastTrashedMeeting() == fixture.meeting.id)
+    }
+
     @Test("deletion cancels queued work, trashes once, and publishes the removal")
     func deletionCancelsWorkAndPublishesRemoval() async throws {
         let fixture = try await MeetingDeletionFixture.make()

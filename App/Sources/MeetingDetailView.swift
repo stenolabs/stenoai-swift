@@ -88,150 +88,58 @@ struct MeetingDetailView: View {
     @State private var citedTurnIndex: Int?
 
     var body: some View {
-        Group {
-            if let revision, !revision.turns.isEmpty {
-                transcriptList(revision)
-            } else {
-                ContentUnavailableView(
-                    meeting?.status == .draft ? "Draft" : "No transcript yet",
-                    systemImage: meeting?.status == .draft
-                        ? "square.and.pencil"
-                        : "text.quote",
-                    description: Text(pendingDescription)
-                )
-            }
-        }
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                if meeting?.isDemo == true {
-                    HStack {
-                        DemoBadge()
-                        Spacer()
-                    }
-                    .padding(.horizontal, Steno.Space.m)
-                    .padding(.vertical, Steno.Space.xs)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background)
-                    Divider()
+        HStack(spacing: 0) {
+            Group {
+                if let revision, !revision.turns.isEmpty {
+                    transcriptList(revision)
+                } else {
+                    ContentUnavailableView(
+                        meeting?.status == .draft ? "Draft" : "No transcript yet",
+                        systemImage: meeting?.status == .draft
+                            ? "square.and.pencil"
+                            : "text.quote",
+                        description: Text(pendingDescription)
+                    )
                 }
-                meetingTransferTopStatus
-                shortRecordingBanner
-                pendingBanner
-                legacyUpgradeTopStatus
-                jobStatusBar
-                findBar
             }
-            .animation(statusAnimation, value: pipelineStatus.state)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let meeting, meeting.status != .recording {
-                meetingAskDock
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top) {
+                VStack(spacing: 0) {
+                    meetingActionBar
+                    if meeting?.isDemo == true {
+                        HStack {
+                            DemoBadge()
+                            Spacer()
+                        }
+                        .padding(.horizontal, Steno.Space.m)
+                        .padding(.vertical, Steno.Space.xs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background)
+                        Divider()
+                    }
+                    meetingTransferTopStatus
+                    shortRecordingBanner
+                    pendingBanner
+                    legacyUpgradeTopStatus
+                    jobStatusBar
+                    findBar
+                }
+                .animation(statusAnimation, value: pipelineStatus.state)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let meeting, meeting.status != .recording {
+                    meetingAskDock
+                }
+            }
+
+            if showInspector {
+                Divider()
+                inspectorContent
+                    .frame(width: 360)
             }
         }
         .navigationTitle(meeting?.title ?? "")
         .navigationSubtitle(subtitle)
-        .frame(minWidth: 560)
-        .inspector(isPresented: $showInspector) { inspectorContent }
-        .preference(key: MainDetailMinimumWidthKey.self, value: showInspector ? 560 + 300 + 1 : 560)
-        .toolbar(id: MacToolbarID.meetingDetail.rawValue) {
-            ToolbarItem(
-                id: MacToolbarItemID.findTranscript.rawValue,
-                placement: .primaryAction
-            ) {
-                Button {
-                    showFind = true
-                    findFocused = true
-                } label: {
-                    Label("Find in transcript", systemImage: "magnifyingglass")
-                }
-                .help("Find in this transcript (Cmd-F)")
-                .disabled(revision == nil)
-            }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .findTranscript,
-                    in: .meetingDetail
-                )
-            )
-            ToolbarItem(
-                id: MacToolbarItemID.inspector.rawValue,
-                placement: .primaryAction
-            ) {
-                Toggle(isOn: $showInspector) {
-                    Label("Details", systemImage: "sidebar.right")
-                }
-                .help("Show notes, participants and speaker assignment")
-            }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .inspector,
-                    in: .meetingDetail
-                )
-            )
-            ToolbarItem(
-                id: MacToolbarItemID.shareMeeting.rawValue,
-                placement: .primaryAction
-            ) {
-                Menu {
-                    Button("Copy Notes") {
-                        Task {
-                            if await model.copyNotesToPasteboard(for: meetingID) != nil {
-                                showsCopyNotesFlash = true
-                            }
-                        }
-                    }
-                    .disabled(meeting == nil)
-                    Button("Share as PDF…") {
-                        Task { await model.shareNotesAsPDF(for: meetingID) }
-                    }
-                    .disabled(meeting == nil)
-                    Divider()
-                    Button("Export Meeting as Markdown…") {
-                        let action = MacFocusedAsyncAction(target: meetingID) {
-                            await model.exportMeetingToFile($0)
-                        }
-                        Task { await action() }
-                    }
-                    Button("Export to Obsidian Vault") {
-                        Task { await model.exportMeetingToObsidianVault(meetingID) }
-                    }
-                } label: {
-                    Label(
-                        "Share Notes",
-                        systemImage: showsCopyNotesFlash ? "checkmark" : "square.and.arrow.up"
-                    )
-                }
-                .help("Copy the notes, share them as a PDF or export the meeting")
-            }
-            .defaultCustomization(
-                MacToolbarPresentation.defaultCustomization(
-                    for: .shareMeeting,
-                    in: .meetingDetail
-                )
-            )
-            if showsContinueRecording {
-                ToolbarItem(
-                    id: MacToolbarItemID.continueRecording.rawValue,
-                    placement: .primaryAction
-                ) {
-                    Button {
-                        showContinueRecordingConfirmation = true
-                    } label: {
-                        Label(
-                            meeting?.status == .draft ? "Record into this note" : "Continue Recording",
-                            systemImage: meeting?.status == .draft ? "mic" : "record.circle"
-                        )
-                    }
-                    .help("Record additional audio into this meeting")
-                }
-                .defaultCustomization(
-                    MacToolbarPresentation.defaultCustomization(
-                        for: .continueRecording,
-                        in: .meetingDetail
-                    )
-                )
-            }
-        }
         .sheet(isPresented: $showMeetingTransferExport) {
             MeetingTransferExportView(meetingID: meetingID)
                 .environment(model)
@@ -295,6 +203,78 @@ struct MeetingDetailView: View {
                 Text("New audio is appended after the existing recordings and transcribed into the same meeting.")
             }
         }
+    }
+
+    /// Selection changes replace the detail view while AppKit may already be
+    /// laying out the titlebar. Keeping these actions in normal view layout
+    /// avoids mutating the window toolbar during that transition.
+    private var meetingActionBar: some View {
+        HStack(spacing: Steno.Space.s) {
+            Spacer()
+            Button {
+                showFind = true
+                findFocused = true
+            } label: {
+                Label("Find in transcript", systemImage: "magnifyingglass")
+            }
+            .help("Find in this transcript (Cmd-F)")
+            .disabled(revision == nil)
+
+            Toggle(isOn: $showInspector) {
+                Label("Details", systemImage: "sidebar.right")
+            }
+            .toggleStyle(.button)
+            .help("Show notes, participants and speaker assignment")
+
+            Menu {
+                Button("Copy Notes") {
+                    Task {
+                        if await model.copyNotesToPasteboard(for: meetingID) != nil {
+                            showsCopyNotesFlash = true
+                        }
+                    }
+                }
+                .disabled(meeting == nil)
+                Button("Share as PDF…") {
+                    Task { await model.shareNotesAsPDF(for: meetingID) }
+                }
+                .disabled(meeting == nil)
+                Divider()
+                Button("Export Meeting as Markdown…") {
+                    let action = MacFocusedAsyncAction(target: meetingID) {
+                        await model.exportMeetingToFile($0)
+                    }
+                    Task { await action() }
+                }
+                Button("Export to Obsidian Vault") {
+                    Task { await model.exportMeetingToObsidianVault(meetingID) }
+                }
+            } label: {
+                Label(
+                    "Share Notes",
+                    systemImage: showsCopyNotesFlash ? "checkmark" : "square.and.arrow.up"
+                )
+            }
+            .help("Copy the notes, share them as a PDF or export the meeting")
+
+            if showsContinueRecording {
+                Button {
+                    showContinueRecordingConfirmation = true
+                } label: {
+                    Label(
+                        meeting?.status == .draft ? "Record into this note" : "Continue Recording",
+                        systemImage: meeting?.status == .draft ? "mic" : "record.circle"
+                    )
+                }
+                .help("Record additional audio into this meeting")
+            }
+        }
+        .controlSize(.small)
+        .buttonStyle(.borderless)
+        .padding(.horizontal, Steno.Space.m)
+        .padding(.vertical, Steno.Space.xs)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     /// Der Anhang-Knopf gehoert zu ruhenden Meetings: versteckt, solange
@@ -622,7 +602,6 @@ struct MeetingDetailView: View {
             .padding(Steno.Space.l)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .inspectorColumnWidth(min: 300, ideal: 360, max: 460)
     }
 
     /// Diarisierung und Anhören setzen die Originalspur voraus; ohne Audio
