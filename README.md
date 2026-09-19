@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/assets/steno-icon.svg" alt="Steno app icon" width="112" height="112">
   <h1>Steno</h1>
-  <p><strong>Private meeting intelligence, built natively for Apple Silicon.</strong></p>
+  <p><strong>Record locally. Review transcripts. Turn meetings into useful notes.</strong></p>
   <p>Record, transcribe, separate speakers, review, and create meeting minutes on Mac, iPhone, and iPad.</p>
 </div>
 
@@ -13,8 +13,8 @@
 </p>
 
 Steno is a native SwiftUI meeting recorder for Apple platforms.
-It keeps recording, transcription, diarization, speaker review, and the default report path on the device.
-External text models are optional, configured explicitly, and contacted only when the user generates a report with the currently selected endpoint.
+Recording, transcription, speaker separation, and the default meeting reports run on the device.
+External text models are optional and configured explicitly. Reports, library chat, and meeting briefs can use the selected endpoint after showing what will be sent.
 
 This repository contains both apps and their shared core.
 It is the native Swift successor to [Steno Legacy](https://github.com/stenolabs/stenoai), not a port of its Electron interface.
@@ -24,10 +24,10 @@ It is the native Swift successor to [Steno Legacy](https://github.com/stenolabs/
 > Do not use it as the only copy of an important recording, and verify your local recording and consent requirements before recording other people.
 
 <p align="center">
-  <img src="docs/assets/steno-macos-demo.jpg" alt="Steno on macOS showing a synthetic demo interview with its local report, transcript, and meeting details" width="1100">
+  <img src="docs/assets/steno-macos-demo.jpg" alt="Steno on macOS showing a synthetic demo interview with its report, transcript, and meeting sidebar" width="1100">
 </p>
 
-<p align="center"><em>Steno for macOS with the bundled synthetic demo library. No real meeting data is shown.</em></p>
+<p align="center"><em>Steno for macOS with synthetic demo content translated into English for this screenshot. No real meeting data is shown.</em></p>
 
 ## What Steno can do
 
@@ -38,9 +38,12 @@ It is the native Swift successor to [Steno Legacy](https://github.com/stenolabs/
 - Preserve transcript edits and retranscriptions as revisions, and keep regenerated reports as separate immutable versions.
 - Create meeting minutes on-device with Apple Intelligence when it is available.
 - Use an explicitly configured Ollama, LM Studio, OpenAI, Anthropic, Amazon Bedrock, or OpenAI-compatible endpoint for an individual report.
-- Organize meetings in folders, filter meeting titles, search within an open transcript, and add notes on every platform.
-- Export Markdown and unchanged original audio tracks from the macOS app.
-- Transfer a portable snapshot of one meeting between devices as a `.stenomeeting` package.
+- Organize meetings in folders, search meeting content, review people, and keep personal notes.
+- Ask questions across selected meetings using their reports and notes, or prepare a brief from earlier reports.
+- Export Markdown, PDF, and unchanged original audio tracks on macOS, or combine microphone and system audio into a stereo M4A.
+- Mirror meeting notes to an Obsidian vault on macOS after approving the destination.
+- Transfer a portable snapshot of one meeting between devices as a `.stenomeeting` package, with optional compressed audio.
+- Enable the optional library-encryption beta on macOS with a recovery code and a retained pre-switch backup.
 - Install a clearly marked synthetic demo library for screenshots and repeatable tests.
 
 ## Platform support
@@ -54,14 +57,16 @@ It is the native Swift successor to [Steno Legacy](https://github.com/stenolabs/
 | Local speaker diarization and review | Yes | Yes |
 | On-device meeting minutes | Apple Intelligence when available | Apple Intelligence when available |
 | Optional external text models | Yes | Yes |
+| Library chat and meeting briefs | Yes | Yes |
 | Single-meeting snapshot | Import and export | Import and export |
+| Optional library encryption | Beta | Not available |
 
 The current deployment targets are macOS 26, iOS 26, and iPadOS 26.
 The project deliberately supports ARM64 and Apple Silicon only.
 
 ## Privacy model
 
-Local processing is the default, but the exact boundary matters.
+Local processing is the default.
 
 | Data | Default behavior |
 |---|---|
@@ -69,21 +74,23 @@ Local processing is the default, but the exact boundary matters.
 | Speech transcription and speaker diarization | Run on the device. Model downloads may contact Apple or the documented model host, but do not contain meeting content. |
 | On-device reports | Use Apple Intelligence when it is available. |
 | External reports | Send the transcript, confirmed speaker names, participant names and companies, and meeting notes only when the user generates a report with an external endpoint. The selected endpoint can remain selected for later reports, and the disclosure is shown before each generation. Audio is never included. |
+| External chat and briefs | Library chat uses reports and notes from the chosen scope; briefs use earlier reports. Using an external endpoint sends that context and the request to the selected provider after confirming the external-send disclosure. That consent can remain valid for later requests in the same session. |
 | API keys | Stored in the Keychain and kept out of the endpoint registry, jobs, and logs. |
 | Telemetry | None. |
 
 External providers never receive the Steno library itself.
-They receive only the report input assembled for the selected run, and the app shows the provider on the resulting report.
+They receive the context assembled for the requested report, chat, or brief. Generated reports record their provider.
 
 Meeting transfer packages are unencrypted files passed to the system share sheet.
 The share sheet can send them through more than AirDrop, so inspect the destination before sharing.
-A package contains the meeting title and date, notes, one current transcript snapshot with visible speaker labels, and only the audio tracks selected for that export.
+A package contains the meeting title and date, notes, one current transcript snapshot with visible speaker labels, and only the audio tracks selected for that export. Compressed transfer audio is a derived copy; the source recordings remain unchanged.
 It does not contain reports, folders, the people library, voice evidence, processing runs, or transcript revision history, so it is not a full backup.
 
 ### Storage caveat
 
-The current beta library is not encrypted at rest.
-On macOS it lives under `~/Library/Application Support/Steno/Library`.
+Libraries are unencrypted by default.
+On macOS, the optional **Library Encryption (Beta)** setting prepares and verifies an encrypted copy before switching. Keep the recovery code safe. The previous unencrypted library remains as a backup until explicitly removed.
+The default macOS location is `~/Library/Application Support/Steno/Library`; a custom location can be selected in Settings.
 On iPhone and iPad it lives in `Documents/StenoLibrary`, is visible in the Files app, and is excluded from iCloud backup while it remains unencrypted.
 There is no automatic library sync or cloud backup yet.
 Steno does not yet provide a verified full-library backup and restore workflow.
@@ -107,7 +114,7 @@ The current beta is built from source.
 ### Requirements
 
 - An Apple Silicon Mac running macOS 26.
-- Xcode 26.6, which is the currently verified toolchain.
+- Xcode 27, verified for the current macOS build (the Swift packages require Swift 6.3).
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 - An Apple development team for physical-device installation and stable local signing.
 
@@ -191,7 +198,7 @@ Completed originals are never overwritten, and failed processing keeps the last 
 | Live and final transcription | Apple Speech Analyzer | Production default. Language availability comes from the operating system on the current device. |
 | Live and final transcription | FluidAudio Parakeet TDT | Optional. Final transcription is available for supported languages; live use is explicitly marked experimental. |
 | Speaker diarization | FluidAudio Sortformer and WeSpeaker | Runs locally. The current diarizer supports at most four speaker slots per audio track. |
-| Meeting minutes | Apple Intelligence (`SystemLanguageModel.default`) | On-device default when the system model is available. On OS 27, Apple selects AFM 3 Core Advanced where supported and falls back to AFM 3 Core; Steno records the actual variant on every generated report. |
+| Meeting minutes | Apple Intelligence (`SystemLanguageModel.default`) | On-device default when the system model is available. Apple selects the system model; Steno records its reported variant with each generated report. |
 | Optional text models | Ollama, LM Studio, OpenAI, Anthropic, Amazon Bedrock, and OpenAI-compatible servers | Configured explicitly. Each report records the selected provider and endpoint revision. |
 
 Models are installed only after explicit consent.
@@ -200,7 +207,7 @@ Providers do not download their own models silently.
 ## Known beta limitations
 
 - There is no signed, notarized release, automatic updater, or public release channel yet.
-- The library is not encrypted at rest and has no automatic backup or synchronization.
+- Library encryption is a macOS-only beta; see [Storage caveat](#storage-caveat) for backup and recovery limits.
 - iPhone and iPad cannot capture system audio from other apps.
 - The current diarizer is limited to four speaker slots per audio track.
 - Guaranteed completion of long iOS post-processing in every background condition is still open work.
