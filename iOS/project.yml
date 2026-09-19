@@ -68,6 +68,9 @@ targets:
         CFBundleName: StenoAI
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # CryptoKit and URLSession use Apple's platform encryption. Reassess
+        # this declaration before adding any bundled encryption implementation.
+        ITSAppUsesNonExemptEncryption: false
         # Wording follows the Mac app, adjusted to the device it runs on.
         NSMicrophoneUsageDescription: StenoAI records your microphone so it can transcribe conversations locally on this device.
         NSLocalNetworkUsageDescription: StenoAI connects to your selected language model server when you test the connection, generate minutes or meeting preparation, or send a chat message.

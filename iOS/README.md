@@ -40,6 +40,12 @@ Set `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml` before
 archiving. Check App Store Connect for an unused build number. The export
 configuration preserves those numbers.
 
+`ITSAppUsesNonExemptEncryption` is `false`: the current cryptographic operations
+use Apple's CryptoKit, Security, and URLSession APIs. The bundled text-normalization
+dependency does not implement application encryption. Reassess this declaration
+when changing dependencies or adding another cryptographic implementation.
+This follows Apple's [encryption declaration guidance](https://developer.apple.com/documentation/security/complying-with-encryption-export-regulations).
+
 Inspect the archive's identity, supported devices, privacy manifest, localized
 permission text, signing, and provisioning profile. An archive made with
 `CODE_SIGNING_ALLOWED=NO` proves compilation and packaging only; it is not a
