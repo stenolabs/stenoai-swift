@@ -86,6 +86,7 @@ final class BackgroundProcessingCoordinator {
     private let controls: PipelineControls
     private let onDeferralChange: @MainActor @Sendable (Bool) -> Void
     private var activeToken: BackgroundActivityToken?
+    private var lifecycleTask: Task<Void, Never>?
 
     init(
         activityProvider: any BackgroundActivityProviding = UIKitBackgroundActivityProvider(),
@@ -135,6 +136,10 @@ final class BackgroundProcessingCoordinator {
     /// Called when the app enters the background. Asks for background time
     /// only when there is something to finish; idle apps burn nothing.
     func handleDidEnterBackground() async {
+        await serializeLifecycle { await self.processBackgroundEntry() }
+    }
+
+    private func processBackgroundEntry() async {
         guard activeToken == nil else { return }
         let kinds = await controls.unfinishedKinds()
         guard !kinds.isEmpty else { return }
@@ -155,6 +160,10 @@ final class BackgroundProcessingCoordinator {
     /// Called when the app returns to the foreground. Releases any granted
     /// time and resumes work that a deferral had stopped.
     func handleWillEnterForeground() async {
+        await serializeLifecycle { await self.processForegroundEntry() }
+    }
+
+    private func processForegroundEntry() async {
         if let token = activeToken {
             activityProvider.end(token)
             activeToken = nil
@@ -166,6 +175,10 @@ final class BackgroundProcessingCoordinator {
     }
 
     func handleExpiration() async {
+        await serializeLifecycle { await self.processExpiration() }
+    }
+
+    private func processExpiration() async {
         guard let token = activeToken else { return }
         activeToken = nil
         activityProvider.end(token)
@@ -173,6 +186,22 @@ final class BackgroundProcessingCoordinator {
         guard !kinds.isEmpty else { return }
         deferTo(kinds)
         await controls.stop()
+    }
+
+    /// Main-actor isolation alone does not order operations across suspension
+    /// points. In particular, restarting a queue before its stop completes is
+    /// ignored by PipelineCoordinator and leaves processing permanently idle.
+    private func serializeLifecycle(
+        _ operation: @escaping @MainActor () async -> Void
+    ) async {
+        let previous = lifecycleTask
+        let task = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
+        lifecycleTask = task
+        await task.value
+        if lifecycleTask == task { lifecycleTask = nil }
     }
 
     private func deferTo(_ kinds: Set<Job.Kind>) {

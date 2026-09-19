@@ -1,0 +1,3 @@
+// Inherit shared defaults, then allow iOS to use its own developer team.
+#include "../../Config/Signing.xcconfig"
+#include? "../.steno-signing.xcconfig"

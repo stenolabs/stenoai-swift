@@ -261,7 +261,7 @@ struct IOSStartupOpeningView: View {
                 .multilineTextAlignment(.center)
         }
         .padding()
-        .navigationTitle("Steno")
+        .navigationTitle("StenoAI")
     }
 }
 
@@ -280,7 +280,7 @@ struct IOSStartupFailedView: View {
             }
             .buttonStyle(.borderedProminent)
         }
-        .navigationTitle("Steno")
+        .navigationTitle("StenoAI")
     }
 }
 
