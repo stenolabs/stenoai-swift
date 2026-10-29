@@ -20,7 +20,7 @@ public actor FluidSortformerProvider: DiarizationProvider {
         self.modelCacheDirectory = modelCacheDirectory
         self.descriptor = EngineDescriptor(
             name: "FluidAudio Sortformer",
-            version: "0.15.2",
+            version: "0.17.4",
             modelVersion: "duration-adaptive Sortformer + wespeaker_v2"
         )
     }
@@ -37,7 +37,7 @@ public actor FluidSortformerProvider: DiarizationProvider {
         hints: DiarizationHints = DiarizationHints(),
         progress: DiarizationProgressHandler? = nil
     ) async throws -> DiarizationOutput {
-        // Sortformer 0.15.2 has four fixed output slots and no speaker-count
+        // The selected Sortformer variants have four fixed output slots and no speaker-count
         // input, so the provider accepts the shared hint without pretending
         // that it can influence this model.
         _ = hints
@@ -177,7 +177,7 @@ public actor FluidSortformerProvider: DiarizationProvider {
         }
         return EngineDescriptor(
             name: "FluidAudio Sortformer",
-            version: "0.15.2",
+            version: "0.17.4",
             modelVersion: "\(sortformerModel) + wespeaker_v2"
         )
     }

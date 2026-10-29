@@ -70,7 +70,7 @@ public struct ParakeetTranscriptionProvider: TranscriptionProvider {
     public var descriptor: EngineDescriptor {
         EngineDescriptor(
             name: "FluidAudio Parakeet TDT",
-            version: "0.15.5",
+            version: "0.17.4",
             modelVersion: "parakeet-tdt-0.6b-v3-coreml"
         )
     }

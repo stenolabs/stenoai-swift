@@ -22,6 +22,9 @@ import os
 /// blips devices produce when apps probe or reconfigure input.
 @MainActor
 public final class MicrophoneActivityMonitor {
+    /// Optional caller policy. Unknown identities can be rejected without
+    /// reading audio or changing recording permissions.
+    public var allowsBundleIdentifier: ((String?) -> Bool)?
     /// Invoked on the main actor once per episode, when external capture starts.
     public var onExternalCaptureStart: (() -> Void)?
 
@@ -42,7 +45,10 @@ public final class MicrophoneActivityMonitor {
                 debounceInterval: MicrophoneActivityMonitor.debounceInterval
             )
             while !Task.isCancelled, let self {
-                let capturingPIDs = MicrophoneActivityMonitor.sampleCapturingProcessIDs()
+                let capturingPIDs = MicrophoneActivityMonitor.eligibleCapturePIDs(
+                    MicrophoneActivityMonitor.sampleCapturingProcesses(),
+                    allowing: self.allowsBundleIdentifier
+                )
                 let transition = decision.update(
                     rawCapturingPIDs: capturingPIDs,
                     excluding: self.ownProcessIdentifier,
@@ -74,7 +80,19 @@ public final class MicrophoneActivityMonitor {
     /// Every pid whose CoreAudio process object reports active input capture,
     /// including Steno's own. Mirrors `processObjectsCapturingInput()` from
     /// the legacy monitor.
-    nonisolated static func sampleCapturingProcessIDs() -> Set<pid_t> {
+    struct CapturingProcess: Sendable {
+        let pid: pid_t
+        let bundleIdentifier: String?
+    }
+
+    nonisolated static func eligibleCapturePIDs(
+        _ captures: [CapturingProcess],
+        allowing policy: ((String?) -> Bool)?
+    ) -> Set<pid_t> {
+        Set(captures.filter { policy?($0.bundleIdentifier) ?? true }.map(\.pid))
+    }
+
+    nonisolated static func sampleCapturingProcesses() -> [CapturingProcess] {
         var listAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -108,8 +126,13 @@ public final class MicrophoneActivityMonitor {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
+        var bundleAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyBundleID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
 
-        var capturingPIDs: Set<pid_t> = []
+        var captures: [CapturingProcess] = []
         for process in processes {
             var isRunningInput: UInt32 = 0
             var runningSize = UInt32(MemoryLayout<UInt32>.size)
@@ -121,10 +144,18 @@ public final class MicrophoneActivityMonitor {
             var pid: pid_t = 0
             var pidSize = UInt32(MemoryLayout<pid_t>.size)
             if AudioObjectGetPropertyData(process, &pidAddress, 0, nil, &pidSize, &pid) == noErr {
-                capturingPIDs.insert(pid)
+                var bundle: CFString?
+                var bundleSize = UInt32(MemoryLayout<CFString?>.size)
+                let status = withUnsafeMutablePointer(to: &bundle) {
+                    AudioObjectGetPropertyData(process, &bundleAddress, 0, nil, &bundleSize, $0)
+                }
+                captures.append(CapturingProcess(
+                    pid: pid,
+                    bundleIdentifier: status == noErr ? bundle as String? : nil
+                ))
             }
         }
-        return capturingPIDs
+        return captures
     }
 
     nonisolated private static func monotonicSeconds() -> TimeInterval {

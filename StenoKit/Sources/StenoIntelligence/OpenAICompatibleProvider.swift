@@ -234,6 +234,7 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
         request: TextModelRequest,
         context: RenderContext,
         includesResponseFormat: Bool,
+        usesJSONMode: Bool = false,
         usesCompletionTokenBudget: Bool = false
     ) -> [String: Any] {
         var body: [String: Any] = [
@@ -276,7 +277,9 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
         body[usesCompletionTokenBudget ? "max_completion_tokens" : "max_tokens"]
             = contextWindow.reservedResponseTokens
         if includesResponseFormat {
-            body["response_format"] = StructuredTemplateCodec.openAIResponseFormat(for: template)
+            body["response_format"] = usesJSONMode
+                ? ["type": "json_object"]
+                : StructuredTemplateCodec.openAIResponseFormat(for: template)
         }
         return body
     }
@@ -287,43 +290,13 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
         context: RenderContext,
         startsWithResponseFormat: Bool
     ) async throws -> (data: Data, usedResponseFormatFallback: Bool) {
-        var result = try await completion(
+        var result = try await completionWithBudgetFallback(
             template: template,
             request: request,
             context: context,
             includesResponseFormat: startsWithResponseFormat
         )
         var usedResponseFormatFallback = false
-        // Ein Kontextfenster-Fehler ist kein Formatfehler: der Server lehnt
-        // die Anfrage wegen ihrer Groesse ab, nicht wegen response_format.
-        // Diese Pruefung steht bewusst vor dem Formatrueckfall, sonst wuerde
-        // ein zu grosser Prompt als vermeintliches Formatproblem erneut
-        // gesendet, nur ohne response_format - und wieder abgelehnt.
-        if !(200..<300).contains(result.response.statusCode),
-           Self.isContextWindowError(result.data)
-        {
-            throw TextModelProviderError.contextWindowExceeded
-        }
-        // Lehnt der Server den Namen des Antwortbudgets ab, entscheidet er
-        // damit nur, wie das Feld heisst - die Grenze selbst bleibt richtig.
-        // Deshalb wird hier umbenannt statt weggelassen. Dieselbe strenge
-        // Bedingung wie beim Formatrueckfall: der Fehlerkoerper muss den
-        // Parameter ausdruecklich benennen, sonst schickt ein 400 aus
-        // anderem Grund die Anfrage ein zweites Mal los.
-        var usesCompletionTokenBudget = false
-        if (400..<500).contains(result.response.statusCode),
-           Self.isTokenBudgetParameterUnsupported(result.data)
-        {
-            try Task.checkCancellation()
-            usesCompletionTokenBudget = true
-            result = try await completion(
-                template: template,
-                request: request,
-                context: context,
-                includesResponseFormat: startsWithResponseFormat,
-                usesCompletionTokenBudget: true
-            )
-        }
         // Der Rueckfall ohne response_format greift nur, wenn beides
         // zutrifft: der Status liegt in 400..<500, UND der Fehlerkoerper
         // benennt response_format/json_schema/structured output ausdruecklich
@@ -334,13 +307,33 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
            (400..<500).contains(result.response.statusCode),
            Self.isResponseFormatUnsupported(result.data)
         {
+            // Some servers explicitly offer JSON mode instead of schema mode.
+            // Keep that constraint before trying an unconstrained response.
+            if Self.suggestsJSONMode(result.data) {
+                try Task.checkCancellation()
+                result = try await completionWithBudgetFallback(
+                    template: template,
+                    request: request,
+                    context: context,
+                    includesResponseFormat: true,
+                    usesJSONMode: true,
+                    usesCompletionTokenBudget: result.usesCompletionTokenBudget
+                )
+                usedResponseFormatFallback = true
+            }
+        }
+        if startsWithResponseFormat,
+           (400..<500).contains(result.response.statusCode),
+           Self.isResponseFormatUnsupported(result.data),
+           !Self.isContextWindowError(result.data)
+        {
             try Task.checkCancellation()
-            result = try await completion(
+            result = try await completionWithBudgetFallback(
                 template: template,
                 request: request,
                 context: context,
                 includesResponseFormat: false,
-                usesCompletionTokenBudget: usesCompletionTokenBudget
+                usesCompletionTokenBudget: result.usesCompletionTokenBudget
             )
             usedResponseFormatFallback = true
         }
@@ -356,11 +349,49 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
         return (result.data, usedResponseFormatFallback)
     }
 
+    /// Rename an explicitly rejected budget parameter at most once across all format retries.
+    private func completionWithBudgetFallback(
+        template: Template,
+        request: TextModelRequest,
+        context: RenderContext,
+        includesResponseFormat: Bool,
+        usesJSONMode: Bool = false,
+        usesCompletionTokenBudget: Bool = false
+    ) async throws -> (data: Data, response: HTTPURLResponse, usesCompletionTokenBudget: Bool) {
+        try Task.checkCancellation()
+        var result = try await completion(
+            template: template, request: request, context: context,
+            includesResponseFormat: includesResponseFormat,
+            usesJSONMode: usesJSONMode,
+            usesCompletionTokenBudget: usesCompletionTokenBudget
+        )
+        if !(200..<300).contains(result.response.statusCode), Self.isContextWindowError(result.data) {
+            throw TextModelProviderError.contextWindowExceeded
+        }
+        var renamed = usesCompletionTokenBudget
+        if !renamed, (400..<500).contains(result.response.statusCode),
+           Self.isTokenBudgetParameterUnsupported(result.data) {
+            try Task.checkCancellation()
+            renamed = true
+            result = try await completion(
+                template: template, request: request, context: context,
+                includesResponseFormat: includesResponseFormat,
+                usesJSONMode: usesJSONMode,
+                usesCompletionTokenBudget: true
+            )
+        }
+        if !(200..<300).contains(result.response.statusCode), Self.isContextWindowError(result.data) {
+            throw TextModelProviderError.contextWindowExceeded
+        }
+        return (result.data, result.response, renamed)
+    }
+
     private func completion(
         template: Template,
         request: TextModelRequest,
         context: RenderContext,
         includesResponseFormat: Bool,
+        usesJSONMode: Bool = false,
         usesCompletionTokenBudget: Bool = false
     ) async throws -> (data: Data, response: HTTPURLResponse) {
         let secret = try resolvedSecret(for: endpoint)
@@ -377,6 +408,7 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
             request: request,
             context: context,
             includesResponseFormat: includesResponseFormat,
+            usesJSONMode: usesJSONMode,
             usesCompletionTokenBudget: usesCompletionTokenBudget
         ))
         let result: TextModelHTTPResponse
@@ -479,6 +511,18 @@ public struct OpenAICompatibleProvider: StructuredTextModelProvider {
             || message.contains("not supported")
             || message.contains("unsupported")
         return identifiesFeature && namesUnsupported
+    }
+
+    private static func suggestsJSONMode(_ data: Data) -> Bool {
+        guard let error = try? JSONDecoder().decode(APIErrorResponse.self, from: data).error else {
+            return false
+        }
+        let message = error.message.lowercased()
+        let recommendsJSONMode = message.contains("use 'json_object'")
+            || message.contains("use json_object")
+            || message.contains("try 'json_object'")
+            || message.contains("try json_object")
+        return message.contains("json_schema") && recommendsJSONMode
     }
 
     /// Der Fehlerkoerper benennt das Kontextfenster ausdruecklich als Grund

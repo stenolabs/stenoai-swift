@@ -253,6 +253,28 @@ struct DiarizationModelInstallerTests {
         #expect(names.contains("wespeaker_v2.mlmodelc"))
     }
 
+    @Test("bundled checksums cover exactly the model bundles the installer downloads")
+    func bundledChecksumsMatchDownloadedBundles() throws {
+        let directory = try emptyDirectory()
+        let required = Set(try requiredBundleURLs(baseDirectory: directory).map {
+            String($0.path.dropFirst(directory.path.count + 1))
+        })
+        let entries = try ModelChecksumManifest.bundled().entries
+        let covered = Set(entries.keys.compactMap { path -> String? in
+            guard let boundary = path.range(of: ".mlmodelc/") else { return nil }
+            return String(path[..<boundary.lowerBound]) + ".mlmodelc"
+        })
+
+        // Derive paths from FluidAudio so a dependency layout change cannot
+        // silently leave verification pointing at unused legacy bundles.
+        #expect(covered == required)
+        for bundle in required {
+            #expect(entries.keys.contains {
+                $0.hasPrefix(bundle + "/") && $0.contains("/weights/")
+            })
+        }
+    }
+
     @Test("the advertised download size matches the bundles that are fetched")
     func advertisedSizeMatchesBundles() async {
         let installer = DiarizationModelInstaller(

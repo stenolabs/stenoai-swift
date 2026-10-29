@@ -94,6 +94,9 @@ struct GeneralSettingsView: View {
                     "Detect Meetings Automatically",
                     isOn: $meetingDetectionEnabled
                 )
+                if meetingDetectionEnabled {
+                    MeetingDetectionAppsView()
+                }
             }
             Section("Calendar Reminders") {
                 Toggle(

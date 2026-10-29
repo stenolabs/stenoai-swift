@@ -280,6 +280,120 @@ struct OpenAICompatibleProviderTests {
         }
     }
 
+    @Test("Osaurus schema rejection retries with the requested JSON mode")
+    func osaurusRejectionUsesJSONMode() async throws {
+        let recorder = RequestRecorder()
+        let context = makeContext()
+        context.register { request in
+            let call = recorder.append(request)
+            let body = try requestJSON(request)
+            let format = body["response_format"] as? [String: Any]
+            if call == 1 {
+                return try errorResponse(
+                    statusCode: 400,
+                    message: "response_format type 'json_schema' is not supported. Use 'json_object' for JSON mode."
+                )
+            }
+            guard format?["type"] as? String == "json_object" else {
+                return try errorResponse(statusCode: 400, message: "JSON mode is required")
+            }
+            return try completionResponse(url: request.url!, content: validStructuredContent(markdown: "Synthetic result"))
+        }
+        defer { context.cleanup() }
+
+        let output = try await context.provider.generate(
+            template: .meetingMinutes, request: .map(TranscriptChunk(turns: []))
+        )
+        #expect(output.sections.first?.markdown == "Synthetic result")
+        #expect(recorder.requests.count == 2)
+        let first = try requestJSON(recorder.requests[0])
+        let second = try requestJSON(recorder.requests[1])
+        #expect((second["response_format"] as? [String: String]) == ["type": "json_object"])
+        #expect(first["messages"] as? [[String: String]] == second["messages"] as? [[String: String]])
+        #expect(first["max_tokens"] as? Int == second["max_tokens"] as? Int)
+    }
+
+    @Test("Budget renaming also works after switching to JSON mode")
+    func jsonModeBudgetRename() async throws {
+        let recorder = RequestRecorder()
+        let context = makeContext()
+        context.register { request in
+            let call = recorder.append(request)
+            if call == 1 {
+                return try errorResponse(statusCode: 400, message: "json_schema is unsupported. Use json_object.")
+            }
+            if call == 2 {
+                return try errorResponse(statusCode: 400, message: "max_tokens is unsupported. Use max_completion_tokens.")
+            }
+            return try completionResponse(url: request.url!, content: validStructuredContent(markdown: "Synthetic result"))
+        }
+        defer { context.cleanup() }
+        _ = try await context.provider.generate(template: .meetingMinutes, request: .map(TranscriptChunk(turns: [])))
+        #expect(recorder.requests.count == 3)
+        let body = try requestJSON(recorder.requests[2])
+        #expect((body["response_format"] as? [String: String]) == ["type": "json_object"])
+        #expect(body["max_tokens"] == nil)
+        #expect(body["max_completion_tokens"] as? Int == context.provider.contextWindow.reservedResponseTokens)
+    }
+
+    @Test("Servers rejecting both formats skip the JSON-mode retry")
+    func rejectsBothFormats() async throws {
+        let recorder = RequestRecorder()
+        let context = makeContext()
+        context.register { request in
+            let call = recorder.append(request)
+            if call == 1 {
+                return try errorResponse(statusCode: 400, message: "json_schema and json_object are unsupported")
+            }
+            return try completionResponse(url: request.url!, content: validStructuredContent(markdown: "Synthetic result"))
+        }
+        defer { context.cleanup() }
+        _ = try await context.provider.generate(template: .meetingMinutes, request: .map(TranscriptChunk(turns: [])))
+        #expect(recorder.requests.count == 2)
+        #expect(try requestJSON(recorder.requests[1])["response_format"] == nil)
+    }
+
+    @Test("JSON mode rejection exhausts one bounded plain-text fallback")
+    func jsonModeRejectionFallsBackOnce() async throws {
+        let recorder = RequestRecorder()
+        let context = makeContext()
+        context.register { request in
+            let call = recorder.append(request)
+            if call == 1 {
+                return try errorResponse(statusCode: 422, message: "json_schema is unsupported. Use json_object.")
+            }
+            if call == 2 {
+                return try errorResponse(statusCode: 400, message: "response_format json_object is unsupported")
+            }
+            return try completionResponse(url: request.url!, content: validStructuredContent(markdown: "Synthetic result"))
+        }
+        defer { context.cleanup() }
+        _ = try await context.provider.generate(template: .meetingMinutes, request: .map(TranscriptChunk(turns: [])))
+        #expect(recorder.requests.count == 3)
+        #expect(try requestJSON(recorder.requests[2])["response_format"] == nil)
+    }
+
+    @Test("JSON mode does not relax section validation or retry unrelated failures", arguments: [true, false])
+    func jsonModeStillValidates(rejectRequest: Bool) async {
+        let recorder = RequestRecorder()
+        let context = makeContext()
+        context.register { request in
+            let call = recorder.append(request)
+            if call == 1 {
+                return try errorResponse(statusCode: 400, message: "json_schema is unsupported. Use json_object.")
+            }
+            if rejectRequest {
+                return try errorResponse(statusCode: 401, message: "Invalid API key")
+            }
+            return try completionResponse(url: request.url!, content: "{}")
+        }
+        defer { context.cleanup() }
+        await #expect(throws: (any Error).self) {
+            _ = try await context.provider.generate(template: .meetingMinutes, request: .map(TranscriptChunk(turns: [])))
+        }
+        #expect(recorder.requests.count == 2)
+    }
+
     @Test("invalid JSON fails without a repair request")
     func invalidJSONFailsWithoutRepairRequest() async {
         // Konservativ: kein Reparatur-Roundtrip mehr. Ein Modell, das

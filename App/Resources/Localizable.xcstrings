@@ -1,6 +1,138 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "FaceTime and Continuity calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FaceTime and Continuity calls"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FaceTime und Continuity-Anrufe"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FaceTime 與接續互通通話"
+          }
+        }
+      }
+    },
+    "Safari and embedded browsers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safari and embedded browsers"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safari und eingebettete Browser"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safari 與內嵌瀏覽器"
+          }
+        }
+      }
+    },
+    "Meeting Apps": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting-Apps"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting Apps"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會議應用程式"
+          }
+        }
+      }
+    },
+    "Add App...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App hinzufügen…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add App..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入應用程式⋯"
+          }
+        }
+      }
+    },
+    "The selected app cannot be identified.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die ausgewählte App kann nicht erkannt werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected app cannot be identified."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法識別所選的應用程式。"
+          }
+        }
+      }
+    },
+    "Only selected apps trigger meeting notifications. Selected browsers can trigger a notification for any website using the microphone. Recording still starts manually.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ausgewählte Apps lösen Meeting-Hinweise aus. Ausgewählte Browser können bei jeder Website mit Mikrofonzugriff einen Hinweis auslösen. Aufnahmen werden weiterhin manuell gestartet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only selected apps trigger meeting notifications. Selected browsers can trigger a notification for any website using the microphone. Recording still starts manually."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有所選的應用程式會觸發會議通知。所選的瀏覽器可能會在任何使用麥克風的網站觸發通知。錄音仍需手動開始。"
+          }
+        }
+      }
+    },
     "": {
       "shouldTranslate": false
     },

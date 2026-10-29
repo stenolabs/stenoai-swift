@@ -140,6 +140,9 @@ extension AppModel {
             return
         }
         let monitor = MicrophoneActivityMonitor()
+        monitor.allowsBundleIdentifier = { identifier in
+            MeetingDetectionAppSelection().allows(identifier)
+        }
         monitor.onExternalCaptureStart = { [weak self] in
             self?.meetingDetectionController?.externalCaptureStarted()
         }

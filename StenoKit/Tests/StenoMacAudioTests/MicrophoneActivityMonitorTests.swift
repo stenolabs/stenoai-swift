@@ -6,6 +6,26 @@ import Testing
 struct MicrophoneActivityMonitorTests {
     private let ownPID: pid_t = 4242
 
+    @Test("an unselected app cannot start or prolong a selected app's capture episode")
+    func appFilterSeparatesCaptureEpisodes() {
+        let unrelated = MicrophoneActivityMonitor.CapturingProcess(pid: 100, bundleIdentifier: "com.example.editor")
+        let meeting = MicrophoneActivityMonitor.CapturingProcess(pid: 200, bundleIdentifier: "com.example.meet")
+        let unknown = MicrophoneActivityMonitor.CapturingProcess(pid: 300, bundleIdentifier: nil)
+        let allowed: (String?) -> Bool = { $0 == "com.example.meet" }
+        func pids(_ processes: [MicrophoneActivityMonitor.CapturingProcess]) -> Set<pid_t> {
+            MicrophoneActivityMonitor.eligibleCapturePIDs(processes, allowing: allowed)
+        }
+        var decision = CaptureEpisodeDecider(debounceInterval: 2)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated, unknown]), excluding: nil, at: 0) == .noChange)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated, unknown]), excluding: nil, at: 3) == .noChange)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated, meeting]), excluding: nil, at: 4) == .noChange)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated, meeting]), excluding: nil, at: 6) == .episodeStarted)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated]), excluding: nil, at: 7) == .noChange)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated]), excluding: nil, at: 9) == .episodeEnded)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated, meeting]), excluding: nil, at: 10) == .noChange)
+        #expect(decision.update(rawCapturingPIDs: pids([unrelated, meeting]), excluding: nil, at: 12) == .episodeStarted)
+    }
+
     private func decider(debounce: TimeInterval = 2.0) -> CaptureEpisodeDecider {
         CaptureEpisodeDecider(debounceInterval: debounce)
     }
