@@ -82,14 +82,20 @@ extension AudioRouteChangeReason {
 
     /// Whether a running capture must stop rather than carry on.
     ///
-    /// Losing the current input device or the category itself invalidates the
-    /// format the writer was opened with; the remaining reasons are additive
-    /// or cosmetic and a capture may continue through them.
+    /// Losing the current input device invalidates the format the writer was
+    /// opened with; the remaining reasons are additive or cosmetic and a
+    /// capture may continue through them.
+    ///
+    /// `categoryChange` continues: the category belongs to this app's own
+    /// session, and `beginRecording` sets it itself. The notification for that
+    /// arrives while the recording is still preparing, so ending on it stopped
+    /// every recording at 00:00:00. A real format change still ends the run,
+    /// through the microphone source that cannot restart.
     public var endsCurrentCapture: Bool {
         switch self {
-        case .oldDeviceUnavailable, .noSuitableRouteForCategory, .categoryChange:
+        case .oldDeviceUnavailable, .noSuitableRouteForCategory:
             true
-        case .newDeviceAvailable, .override, .wakeFromSleep,
+        case .newDeviceAvailable, .categoryChange, .override, .wakeFromSleep,
              .routeConfigurationChange, .unknown:
             false
         }

@@ -115,12 +115,13 @@ targets:
             LSItemContentTypes:
               - org.steno.meeting-transfer
             CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
     settings:
       base:
         ARCHS: arm64
         PRODUCT_NAME: Steno
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "2"
+        CURRENT_PROJECT_VERSION: "3"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         STRING_CATALOG_GENERATE_SYMBOLS: true
         SWIFT_EMIT_LOC_STRINGS: true

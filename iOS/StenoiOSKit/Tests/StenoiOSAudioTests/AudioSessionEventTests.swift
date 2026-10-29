@@ -142,7 +142,6 @@ struct AudioSessionEventTests {
         arguments: [
             AudioRouteChangeReason.oldDeviceUnavailable,
             .noSuitableRouteForCategory,
-            .categoryChange,
         ]
     )
     func reasonsThatEndCapture(reason: AudioRouteChangeReason) {
@@ -153,6 +152,8 @@ struct AudioSessionEventTests {
         "Additive or cosmetic route changes let the capture continue",
         arguments: [
             AudioRouteChangeReason.newDeviceAvailable,
+            // beginRecording's own setCategory posts this one.
+            .categoryChange,
             .override,
             .wakeFromSleep,
             .routeConfigurationChange,
