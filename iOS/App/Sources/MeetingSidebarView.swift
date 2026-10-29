@@ -230,7 +230,7 @@ struct MeetingSidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationTitle("Steno")
+        .navigationTitle("StenoAI")
         .searchable(text: $query, prompt: searchAllContent ? "Search All Content" : "Search Titles")
         .safeAreaInset(edge: .top) {
             if isSearching {

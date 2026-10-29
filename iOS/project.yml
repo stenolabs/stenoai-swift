@@ -30,8 +30,8 @@ targets:
     type: application
     platform: iOS
     configFiles:
-      Debug: ../Config/Signing.xcconfig
-      Release: ../Config/Signing.xcconfig
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     supportedDestinations: [iOS, iPadOS]
     sources:
       - App/Sources
@@ -64,10 +64,16 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Steno
+        CFBundleDisplayName: StenoAI
+        CFBundleName: StenoAI
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # CryptoKit and URLSession use Apple's platform encryption. Reassess
+        # this declaration before adding any bundled encryption implementation.
+        ITSAppUsesNonExemptEncryption: false
         # Wording follows the Mac app, adjusted to the device it runs on.
-        NSMicrophoneUsageDescription: Steno records your microphone so it can transcribe conversations locally on this device.
-        NSLocalNetworkUsageDescription: Steno connects to a language model server only when you test it or explicitly generate minutes with it.
+        NSMicrophoneUsageDescription: StenoAI records your microphone so it can transcribe conversations locally on this device.
+        NSLocalNetworkUsageDescription: StenoAI connects to your selected language model server when you test the connection, generate minutes or meeting preparation, or send a chat message.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         # Recording continues while the screen is locked or the app is not
@@ -109,10 +115,13 @@ targets:
             LSItemContentTypes:
               - org.steno.meeting-transfer
             CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
     settings:
       base:
         ARCHS: arm64
         PRODUCT_NAME: Steno
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "5"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         STRING_CATALOG_GENERATE_SYMBOLS: true
         SWIFT_EMIT_LOC_STRINGS: true
@@ -121,8 +130,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: false
-        # The team comes through Config/Signing.xcconfig from the ignored
-        # local .steno-signing.xcconfig.
+        # The team comes through iOS/Config/Signing.xcconfig. An ignored
+        # iOS/.steno-signing.xcconfig can override the shared local settings.
         # Anything set in Xcode's Signing tab would be lost on the next
         # xcodegen run.
         CODE_SIGN_STYLE: Automatic

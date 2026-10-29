@@ -107,6 +107,27 @@ struct AudioSessionEventTests {
 
     // MARK: - Route change decoding
 
+    @Test("The recording category change notification lets capture continue")
+    func categoryChangeNotificationContinuesCapture() async throws {
+        let center = NotificationCenter()
+        let controller = AudioSessionController(notificationCenter: center)
+        let stream = await controller.events()
+
+        center.post(
+            name: AVAudioSession.routeChangeNotification,
+            object: nil,
+            userInfo: [
+                AVAudioSessionRouteChangeReasonKey:
+                    AVAudioSession.RouteChangeReason.categoryChange.rawValue
+            ]
+        )
+
+        let event = try #require(await firstEvent(from: stream))
+        #expect(event == .routeChanged(.categoryChange))
+        guard case .routeChanged(let reason) = event else { return }
+        #expect(!reason.endsCurrentCapture)
+    }
+
     @Test("A route change reports the system reason")
     func routeChangeReason() {
         let notification = Notification(
@@ -142,7 +163,6 @@ struct AudioSessionEventTests {
         arguments: [
             AudioRouteChangeReason.oldDeviceUnavailable,
             .noSuitableRouteForCategory,
-            .categoryChange,
         ]
     )
     func reasonsThatEndCapture(reason: AudioRouteChangeReason) {
@@ -153,6 +173,8 @@ struct AudioSessionEventTests {
         "Additive or cosmetic route changes let the capture continue",
         arguments: [
             AudioRouteChangeReason.newDeviceAvailable,
+            // beginRecording's own setCategory posts this one.
+            .categoryChange,
             .override,
             .wakeFromSleep,
             .routeConfigurationChange,

@@ -177,6 +177,7 @@ final class AppModel {
     /// `AVAudioSession` is shared state; two controllers would both observe
     /// and both activate it, and whichever deactivated last would silently win.
     let audioSession: AudioSessionController
+    let audioPlayback: AudioPlaybackModel
 
     /// The running recording, owned by the process rather than by a view.
     ///
@@ -385,6 +386,7 @@ final class AppModel {
         }
         let session = AudioSessionController()
         audioSession = session
+        audioPlayback = AudioPlaybackModel(session: session)
         recording = RecordingModel(
             session: session,
             transcriptionRegistry: registrySource
@@ -777,6 +779,7 @@ final class AppModel {
 
     private func detachRuntimeIfIdle() -> DetachedRuntime? {
         guard recording.detachRuntimeIfIdle() else { return nil }
+        audioPlayback.stop()
         let detached = DetachedRuntime(runtime: runtime)
         runtime = nil
         folderStore = nil
@@ -1306,6 +1309,7 @@ final class AppModel {
             recordingIsActive: recording.isActive,
             recordingMeetingID: recording.meetingID
         )
+        audioPlayback.stop()
 
         let deletedMeeting = try await snapshot.runtime.library.loadMeeting(meetingID)
         do {

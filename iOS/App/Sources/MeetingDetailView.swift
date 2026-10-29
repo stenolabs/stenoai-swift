@@ -41,6 +41,7 @@ struct MeetingDetailView: View {
     @State private var transcriptPublication = MeetingTranscriptPublicationGate()
     @State private var pendingRevision: TranscriptRevision?
     @State private var isAdoptingPendingTranscript = false
+    @State private var audioPlaybackState = MeetingAudioPlaybackState()
     @State private var pendingAdoptionPresentation:
         PendingTranscriptAdoptionPresentation?
     @FocusState private var transcriptSearchIsFocused: Bool
@@ -91,6 +92,10 @@ struct MeetingDetailView: View {
             .inspectorColumnWidth(min: 300, ideal: 360, max: 460)
         }
         .task(id: meetingID) { await observeMeeting() }
+        .task(id: audioPlaybackLoadIdentity) {
+            await audioPlaybackState.load(app: app, meetingID: meetingID)
+        }
+        .onDisappear { audioPlaybackState.leave(app: app) }
         .task(id: shouldPresentDraftInspector) {
             guard shouldPresentDraftInspector else { return }
             // Run only after `didLoad` has produced a rendered detail. On
@@ -99,6 +104,20 @@ struct MeetingDetailView: View {
             shouldPresentDraftInspector = false
             router.showInspector()
         }
+    }
+
+    private struct AudioPlaybackLoadIdentity: Hashable {
+        let meetingID: MeetingID
+        let library: ObjectIdentifier?
+        let recording: Bool
+    }
+
+    private var audioPlaybackLoadIdentity: AudioPlaybackLoadIdentity {
+        AudioPlaybackLoadIdentity(
+            meetingID: meetingID,
+            library: app.runtime.map { ObjectIdentifier($0.library) },
+            recording: app.recording.isActive
+        )
     }
 
     private var navigationContent: AnyView {
@@ -295,6 +314,7 @@ struct MeetingDetailView: View {
                     }
                 }
             }
+            MeetingAudioPlaybackSection(state: audioPlaybackState)
             failedParakeetSection
             MeetingReportsSection(
                 meetingID: meetingID,

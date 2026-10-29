@@ -72,7 +72,7 @@ final class RecordingModel {
     private(set) var isSilenceAlarming = false
     private(set) var microphonePermission: RecordPermissionStatus
 
-    /// Projects the cumulative snapshots into newest-first rows. The volatile
+    /// Projects the cumulative snapshots into chronological rows. The volatile
     /// row stays marked as such, so nobody quotes a guess.
     private var liveTranscriptFeed = LiveTranscriptFeed()
     private(set) var liveTranscriptRows: [LiveTranscriptFeed.Row] = []
@@ -513,7 +513,7 @@ final class RecordingModel {
 
     private func clearVolatileTranscript() {
         liveTranscriptFeed.clearVolatile(for: .microphone)
-        liveTranscriptRows = liveTranscriptFeed.rows
+        publishLiveTranscriptRows()
     }
 
     private func noteTranscriptionFailure(_ error: Error) {
@@ -522,7 +522,22 @@ final class RecordingModel {
 
     func applyLiveEvent(_ event: TranscriptionEvent) {
         liveTranscriptFeed.apply(event, for: .microphone)
-        liveTranscriptRows = liveTranscriptFeed.rows
+        publishLiveTranscriptRows()
+    }
+
+    private func publishLiveTranscriptRows() {
+        // The shared feed groups the latest final and current hypothesis for
+        // the Mac's catch-up view. The iPhone reads as a continuous transcript,
+        // including when recognition publishes another block after unlocking.
+        liveTranscriptRows = liveTranscriptFeed.rows.sorted { lhs, rhs in
+            if lhs.block.start != rhs.block.start { return lhs.block.start < rhs.block.start }
+            if lhs.block.end != rhs.block.end { return lhs.block.end < rhs.block.end }
+            if lhs.block.channel != rhs.block.channel {
+                return lhs.block.channel.rawValue < rhs.block.channel.rawValue
+            }
+            if lhs.kind != rhs.kind { return lhs.kind == .final }
+            return lhs.block.text < rhs.block.text
+        }
     }
 
     // MARK: - Internals
@@ -572,7 +587,7 @@ final class RecordingModel {
         }
         level = .silence
         liveTranscriptFeed.clearVolatile(for: .microphone)
-        liveTranscriptRows = liveTranscriptFeed.rows
+        publishLiveTranscriptRows()
         silence.stop()
         silentSeconds = 0
         isSilenceAlarming = false

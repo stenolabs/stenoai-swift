@@ -26,14 +26,14 @@ struct LocalizationCatalogTests {
         let catalog = try catalog(named: "InfoPlist")
         let expected: [String: (english: String, german: String, traditionalChinese: String)] = [
             "NSMicrophoneUsageDescription": (
-                "Steno records your microphone so it can transcribe conversations locally on this device.",
-                "Steno zeichnet dein Mikrofon auf, damit Gespräche lokal auf diesem Gerät transkribiert werden können.",
-                "Steno 錄製您的麥克風以在此裝置本機轉錄對話。"
+                "StenoAI records your microphone so it can transcribe conversations locally on this device.",
+                "StenoAI zeichnet dein Mikrofon auf, damit Gespräche lokal auf diesem Gerät transkribiert werden können.",
+                "StenoAI 錄製您的麥克風以在此裝置本機轉錄對話。"
             ),
             "NSLocalNetworkUsageDescription": (
-                "Steno connects to a language model server only when you test it or explicitly generate minutes with it.",
-                "Steno verbindet sich mit einem Sprachmodellserver nur, wenn du ihn testest oder ausdrücklich ein Protokoll erstellst.",
-                "Steno 僅在您測試連線或明確生成會議紀錄時連接語言模型伺服器。"
+                "StenoAI connects to your selected language model server when you test the connection, generate minutes or meeting preparation, or send a chat message.",
+                "StenoAI verbindet sich mit deinem ausgewählten Sprachmodellserver, wenn du die Verbindung testest, ein Protokoll oder eine Besprechungsvorbereitung erstellst oder eine Chatnachricht sendest.",
+                "StenoAI 會在您測試連線、產生會議紀錄或會前準備，或傳送聊天訊息時，連線至您選擇的語言模型伺服器。"
             ),
         ]
 

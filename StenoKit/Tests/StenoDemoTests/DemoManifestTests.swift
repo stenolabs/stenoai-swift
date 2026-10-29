@@ -868,13 +868,12 @@ struct DemoManifestTests {
         #expect(resourcePaths.count == Set(resourcePaths).count)
 
         var actualFiles: [String] = []
-        let rootPrefix = bundle.rootURL.path.hasSuffix("/") ? bundle.rootURL.path : bundle.rootURL.path + "/"
-        let enumerator = try #require(FileManager.default.enumerator(at: bundle.rootURL, includingPropertiesForKeys: nil))
-        while let url = enumerator.nextObject() as? URL {
+        let enumerator = try #require(FileManager.default.enumerator(atPath: bundle.rootURL.path))
+        while let relativePath = enumerator.nextObject() as? String {
+            let url = bundle.rootURL.appending(path: relativePath)
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             let type = try #require(attributes[.type] as? FileAttributeType)
             if type == .typeDirectory { continue }
-            let relativePath = String(url.path.dropFirst(rootPrefix.count))
             guard type == .typeRegular else { throw FixtureValidationError.bundleFileType(relativePath) }
             let permissions = try #require(attributes[.posixPermissions] as? NSNumber).intValue
             guard permissions & 0o111 == 0 else { throw FixtureValidationError.bundleExecutable(relativePath) }

@@ -33,7 +33,7 @@ struct LibraryChatView: View {
                 }
                 ForEach(session.messages) { message in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(message.role == .user ? String(localized: "You") : "Steno").font(.caption.bold()).foregroundStyle(.secondary)
+                        Text(message.role == .user ? String(localized: "You") : "StenoAI").font(.caption.bold()).foregroundStyle(.secondary)
                         Text(message.text).textSelection(.enabled)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

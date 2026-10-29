@@ -7,7 +7,31 @@ import Testing
 @Suite("iOS live transcript feed")
 struct IOSLiveTranscriptFeedIntegrationTests {
     @Test @MainActor
-    func cumulativeFinalsArePublishedOnceAndNewestFirst() {
+    func laterSpeechStaysBelowEarlierSpeechAcrossFinalization() {
+        let model = RecordingModel(session: AudioSessionController())
+        let beforeLock = block("before locking", start: 0, end: 5)
+        let afterUnlock = block("after unlocking", start: 40, end: 42)
+        let current = block("continuing", start: 42, end: 43)
+
+        model.applyLiveEvent(.volatile(output([beforeLock, afterUnlock, current])))
+
+        #expect(model.liveTranscriptRows.map(\.block.text) == [
+            "before locking", "after unlocking", "continuing",
+        ])
+        #expect(model.liveTranscriptRows.map(\.kind) == [.final, .final, .volatile])
+        let stableIDs = model.liveTranscriptRows.filter { $0.kind == .final }.map(\.id)
+
+        model.applyLiveEvent(.final(output([beforeLock, afterUnlock, current])))
+
+        #expect(model.liveTranscriptRows.map(\.block.text) == [
+            "before locking", "after unlocking", "continuing",
+        ])
+        #expect(Array(model.liveTranscriptRows.prefix(2).map(\.id)) == stableIDs)
+        #expect(model.liveTranscriptRows.allSatisfy { $0.kind == .final })
+    }
+
+    @Test @MainActor
+    func cumulativeFinalsArePublishedOnceInSpokenOrder() {
         let model = RecordingModel(session: AudioSessionController())
         let first = block("first", start: 0, end: 1)
         let second = block("second", start: 1, end: 2)
@@ -15,7 +39,7 @@ struct IOSLiveTranscriptFeedIntegrationTests {
         model.applyLiveEvent(.final(output([first])))
         model.applyLiveEvent(.final(output([first, second])))
 
-        #expect(model.liveTranscriptRows.map(\.block.text) == ["second", "first"])
+        #expect(model.liveTranscriptRows.map(\.block.text) == ["first", "second"])
     }
 
     @Test @MainActor
@@ -39,7 +63,7 @@ struct IOSLiveTranscriptFeedIntegrationTests {
         model.applyLiveEvent(.volatile(output([final, current])))
         model.applyLiveEvent(.final(output([final, current])))
 
-        #expect(model.liveTranscriptRows.map(\.block.text) == ["current", "final"])
+        #expect(model.liveTranscriptRows.map(\.block.text) == ["final", "current"])
         #expect(model.liveTranscriptRows.allSatisfy { $0.kind == .final })
     }
 

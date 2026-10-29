@@ -13,6 +13,24 @@ private final class ControlCounters {
 }
 
 @MainActor
+private final class BackgroundStopGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var entered = false
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            entered = true
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
 /// Mutable fixture state so a test can flip unfinished kinds mid-scenario.
 private final class JobKindBox: @unchecked Sendable {
     var value: Set<Job.Kind> = []
@@ -48,6 +66,49 @@ private final class MockActivityProvider: BackgroundActivityProviding {
 @Suite("Background processing coordinator")
 @MainActor
 struct BackgroundProcessingCoordinatorTests {
+    @Test("foreground waits for an in-flight stop before resuming", arguments: [true, false])
+    func foregroundDuringStop(grantedBackgroundTime: Bool) async {
+        let provider = MockActivityProvider()
+        provider.grantOnBegin = grantedBackgroundTime
+        let gate = BackgroundStopGate()
+        let counters = ControlCounters()
+        var stopFinished = false
+        let coordinator = BackgroundProcessingCoordinator(
+            activityProvider: provider,
+            observesLifecycleNotifications: false,
+            controls: .init(
+                unfinishedKinds: { [.finalASR] },
+                stop: {
+                    counters.stopCalls += 1
+                    await gate.wait()
+                    stopFinished = true
+                },
+                resume: {
+                    #expect(stopFinished, "Resuming before stop finishes leaves the queue stopped")
+                    counters.resumeCalls += 1
+                }
+            ),
+            onDeferralChange: { counters.deferralFlags.append($0) }
+        )
+        let background = Task {
+            await coordinator.handleDidEnterBackground()
+            if grantedBackgroundTime { await coordinator.handleExpiration() }
+        }
+        while !gate.entered { await Task.yield() }
+        let foreground = Task { await coordinator.handleWillEnterForeground() }
+        // Let the foreground handler run while the stop is still suspended.
+        for _ in 0..<20 { await Task.yield() }
+        #expect(counters.resumeCalls == 0)
+        #expect(coordinator.deferredJobKinds == [.finalASR])
+        gate.release()
+        await background.value
+        await foreground.value
+        #expect(counters.stopCalls == 1)
+        #expect(counters.resumeCalls == 1)
+        #expect(coordinator.deferredJobKinds.isEmpty)
+        #expect(counters.deferralFlags == [true, false])
+    }
+
     private func makeCoordinator(
         provider: MockActivityProvider,
         counters: ControlCounters,
