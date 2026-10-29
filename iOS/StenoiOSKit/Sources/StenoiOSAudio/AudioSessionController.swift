@@ -1,7 +1,7 @@
 @preconcurrency import AVFAudio
 import Foundation
 
-/// Owns the process-wide `AVAudioSession` for recording.
+/// Owns the process-wide `AVAudioSession`, with capture taking priority over playback.
 ///
 /// The Mac has no equivalent: there the engine simply runs. On iOS the session
 /// is shared state that the system can revoke, so every capture goes through
@@ -13,6 +13,10 @@ public actor AudioSessionController {
     }
 
     public struct RecordingLease: Hashable, Sendable {
+        fileprivate let id: UUID
+    }
+
+    public struct PlaybackLease: Hashable, Sendable {
         fileprivate let id: UUID
     }
 
@@ -40,6 +44,7 @@ public actor AudioSessionController {
     private var continuations: [UUID: AsyncStream<AudioSessionEvent>.Continuation] = [:]
     private var ownership = AudioSessionOwnership()
     private var meteringStops: [UUID: @Sendable () async -> Void] = [:]
+    private var playbackStops: [UUID: @Sendable () async -> Void] = [:]
 
     public init(
         session: AVAudioSession = .sharedInstance(),
@@ -70,18 +75,24 @@ public actor AudioSessionController {
     public func beginMetering(
         mode: Mode = .standard,
         stopBeforeRecording: @Sendable @escaping () async -> Void
-    ) throws -> MeteringLease? {
+    ) async throws -> MeteringLease? {
         let id = UUID()
+        let playbackID = ownership.playbackID
         guard ownership.beginMetering(id) else { return nil }
         meteringStops[id] = stopBeforeRecording
+        let stopPlayback = playbackID.flatMap { playbackStops.removeValue(forKey: $0) }
+        await stopPlayback?()
+        guard ownership.ownsMetering(id) else {
+            meteringStops[id] = nil
+            return nil
+        }
         do {
             try configureSession(mode: mode)
             try activateSession()
             return MeteringLease(id: id)
         } catch {
             meteringStops[id] = nil
-            _ = ownership.endMetering(id)
-            try? deactivateSession()
+            if ownership.endMetering(id) { try? deactivateSession() }
             throw error
         }
     }
@@ -97,16 +108,19 @@ public actor AudioSessionController {
     /// the process-wide session while its old tap is being removed.
     public func beginRecording(mode: Mode = .standard) async throws -> RecordingLease {
         let lease = RecordingLease(id: UUID())
+        let playbackID = ownership.playbackID
         let meteringID = ownership.beginRecording(lease.id)
+        let stopPlayback = playbackID.flatMap { playbackStops.removeValue(forKey: $0) }
         let stopMetering = meteringID.flatMap { meteringStops.removeValue(forKey: $0) }
+        await stopPlayback?()
         await stopMetering?()
+        guard ownership.ownsRecording(lease.id) else { throw CancellationError() }
         do {
             try configureSession(mode: mode)
             try activateSession()
             return lease
         } catch {
-            _ = ownership.endRecording(lease.id)
-            try? deactivateSession()
+            if ownership.endRecording(lease.id) { try? deactivateSession() }
             throw error
         }
     }
@@ -114,6 +128,33 @@ public actor AudioSessionController {
     public func endRecording(_ lease: RecordingLease) throws {
         guard ownership.endRecording(lease.id) else { return }
         try deactivateSession()
+    }
+
+    /// Playback is lower priority than either capture or microphone diagnostics.
+    /// A capture claims ownership before awaiting this callback, so delayed
+    /// playback cleanup cannot deactivate the session of a new recording.
+    public func beginPlayback(
+        stopBeforeRecording: @Sendable @escaping () async -> Void
+    ) throws -> PlaybackLease? {
+        let lease = PlaybackLease(id: UUID())
+        guard ownership.beginPlayback(lease.id) else { return nil }
+        playbackStops[lease.id] = stopBeforeRecording
+        do {
+            try session.setCategory(.playback, mode: .default)
+            try activateSession()
+            return lease
+        } catch {
+            playbackStops[lease.id] = nil
+            if ownership.endPlayback(lease.id) { try? deactivateSession() }
+            throw error
+        }
+    }
+
+    public func endPlayback(_ lease: PlaybackLease) throws {
+        playbackStops[lease.id] = nil
+        guard ownership.endPlayback(lease.id) else { return }
+        defer { try? deactivateSession() }
+        try configureSession(mode: .standard)
     }
 
     /// Events for as long as the returned stream is held.
@@ -230,13 +271,18 @@ public actor AudioSessionController {
 struct AudioSessionOwnership {
     private var recordingID: UUID?
     private var meteringID: UUID?
+    private(set) var playbackID: UUID?
 
     var isRecording: Bool { recordingID != nil }
-    var allowsReadinessConfiguration: Bool { recordingID == nil }
+    var allowsReadinessConfiguration: Bool { recordingID == nil && playbackID == nil }
+
+    func ownsMetering(_ id: UUID) -> Bool { meteringID == id }
+    func ownsRecording(_ id: UUID) -> Bool { recordingID == id }
 
     mutating func beginMetering(_ id: UUID) -> Bool {
         guard recordingID == nil, meteringID == nil else { return false }
         meteringID = id
+        playbackID = nil
         return true
     }
 
@@ -248,6 +294,7 @@ struct AudioSessionOwnership {
 
     mutating func beginRecording(_ id: UUID) -> UUID? {
         recordingID = id
+        playbackID = nil
         defer { meteringID = nil }
         return meteringID
     }
@@ -256,6 +303,18 @@ struct AudioSessionOwnership {
         guard recordingID == id else { return false }
         recordingID = nil
         return true
+    }
+
+    mutating func beginPlayback(_ id: UUID) -> Bool {
+        guard recordingID == nil, meteringID == nil, playbackID == nil else { return false }
+        playbackID = id
+        return true
+    }
+
+    mutating func endPlayback(_ id: UUID) -> Bool {
+        guard playbackID == id else { return false }
+        playbackID = nil
+        return recordingID == nil && meteringID == nil
     }
 }
 

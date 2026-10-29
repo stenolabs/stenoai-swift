@@ -3,6 +3,16 @@
 The iOS application is displayed as **StenoAI**. The Xcode scheme, Swift module,
 and build product remain `Steno`. The minimum versions are iOS 26 and iPadOS 26.
 
+## Listen to a recording
+
+Open a meeting and use **Original recording** below its title to play or pause
+the saved audio and seek along the timeline. Playback also works without a
+transcript or an installed speech model. If the meeting has several registered
+audio tracks, choose the track first.
+
+Playback only reads the original file. Leaving the meeting stops playback;
+starting a recording or microphone check takes priority and stops playback too.
+
 ## Local signing
 
 `Config/Signing.xcconfig` inherits the repository's shared signing defaults.
