@@ -268,7 +268,7 @@ struct RecordingView: View {
     private var transcriptText: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                // Newest first. Volatile text is visibly lighter, and the
+                // Spoken order. Volatile text is visibly lighter, and the
                 // caption below never goes away: the live transcript is a
                 // catch-up aid, not something to quote from.
                 ForEach(model.liveTranscriptRows) { row in
